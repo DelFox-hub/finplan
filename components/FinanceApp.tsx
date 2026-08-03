@@ -471,12 +471,6 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
     setOpsPage(1);
   }
 
-  const monthOptions = useMemo(() => {
-    const start = monthIndex(diaryStart);
-    const end = Math.max(start + Number(settings?.years || 3) * 12 - 1, monthIndex(currentMonth()) + 24, monthIndex(viewMonth));
-    return Array.from({ length: end - start + 1 }, (_, i) => monthFromIndex(start + i));
-  }, [diaryStart, settings?.years, viewMonth]);
-
   function monthOps(month = viewMonth) {
     return operations
       .filter((o) => inMonth(o.op_date, month))
@@ -489,6 +483,10 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
 
   function dueIncomes(month: string) {
     return incomes.filter((i) => incomeDue(i, month, calcStart));
+  }
+
+  function isPastMonth(month: string) {
+    return monthIndex(month) < monthIndex(currentMonth());
   }
 
   function isPaymentExcluded(paymentId: string, month: string) {
@@ -509,7 +507,7 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
         category_id: p.category_id,
         title: p.title,
         amount: Number(p.amount || 0),
-        completed: !isPaymentExcluded(p.id, month),
+        completed: isPastMonth(month) && !isPaymentExcluded(p.id, month),
         sort_order: Number(p.sort_order || 0),
         source_recurring_payment_id: p.id,
         source_recurring_income_id: null,
@@ -533,16 +531,40 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
   }
 
   async function toggleVirtualPayment(item: VirtualOperation, checked: boolean) {
+    const sourceMonth = item.source_month || viewMonth;
+
     if (checked) {
-      await supabase
-        .from("monthly_payment_exclusions")
-        .delete()
-        .eq("user_id", userId)
-        .eq("recurring_payment_id", item.payment.id)
-        .eq("month", item.source_month);
-      setExclusions((prev) => prev.filter((e) => !(e.recurring_payment_id === item.payment.id && e.month === item.source_month)));
+      if (isPastMonth(sourceMonth)) {
+        await supabase
+          .from("monthly_payment_exclusions")
+          .delete()
+          .eq("user_id", userId)
+          .eq("recurring_payment_id", item.payment.id)
+          .eq("month", sourceMonth);
+        setExclusions((prev) => prev.filter((e) => !(e.recurring_payment_id === item.payment.id && e.month === sourceMonth)));
+        return;
+      }
+
+      const row = {
+        user_id: userId,
+        op_date: dateForDay(sourceMonth, item.payment.due_day),
+        kind: "expense" as Kind,
+        category_id: item.payment.category_id,
+        title: item.payment.title,
+        amount: Number(item.payment.amount || 0),
+        completed: true,
+        source_recurring_payment_id: item.payment.id,
+        source_recurring_income_id: null,
+        sort_order: Number(item.payment.sort_order || 0)
+      };
+      const { data, error } = await supabase.from("operations").insert(row).select("*").single();
+      if (error) {
+        flash(error.message);
+        return;
+      }
+      setOperations((prev) => [...prev, { ...data, amount: Number(data.amount || 0) }]);
     } else {
-      const row = { user_id: userId, recurring_payment_id: item.payment.id, month: item.source_month || viewMonth };
+      const row = { user_id: userId, recurring_payment_id: item.payment.id, month: sourceMonth };
       const { error } = await supabase.from("monthly_payment_exclusions").upsert(row);
       if (error) flash(error.message);
       setExclusions((prev) => {
@@ -878,7 +900,7 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
       active: true,
       total_months: 0,
       paid_months: 0,
-      valid_from_month: null,
+      valid_from_month: viewMonth,
       valid_to_month: null,
       sort_order: nextSortOrder(payments)
     };
@@ -927,7 +949,7 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
       due_day: 1,
       frequency: "monthly",
       active: true,
-      valid_from_month: null,
+      valid_from_month: viewMonth,
       valid_to_month: null,
       sort_order: nextSortOrder(incomes)
     };
@@ -1201,17 +1223,24 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
             </button>
           </nav>
 
-          <div className="month-line">
+        </header>
+
+        {message && <div className="toast">{message}</div>}
+
+        {mainTab === "diary" && (
+          <>
+        <section className="diaryMonthBar">
+          <div>
+            <h3>Период дневника</h3>
+            <span className="hint">Выбор месяца влияет только на дневник операций и его показатели.</span>
+          </div>
+          <div className="diaryMonthTools">
             <button className="btn month-btn" disabled={monthIndex(viewMonth) <= monthIndex(diaryStart)} onClick={() => setViewMonth(addMonths(viewMonth, -1))}>
               ←
             </button>
-            <select className="month-inline" value={viewMonth} onChange={(e) => setViewMonth(e.target.value)}>
-              {monthOptions.map((m) => (
-                <option key={m} value={m}>
-                  {monthLongLabel(m)}
-                </option>
-              ))}
-            </select>
+            <div className="diaryMonthPickerWrap">
+              <MonthPicker value={viewMonth} min={diaryStart} onChange={(value) => value && setViewMonth(value)} />
+            </div>
             <button className="btn month-btn current" onClick={() => setViewMonth(currentMonth())}>
               текущий
             </button>
@@ -1219,12 +1248,8 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
               →
             </button>
           </div>
-        </header>
+        </section>
 
-        {message && <div className="toast">{message}</div>}
-
-        {mainTab === "diary" && (
-          <>
         <section className="summaryGrid">
           <div className={`summaryCard ${before < 0 ? "negative" : ""}`}>
             <b>{fmt(before)}</b>

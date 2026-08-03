@@ -2671,3 +2671,146 @@ select {
 @media (max-width: 1280px) { .plannerKpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } .plannerWorkspace { grid-template-columns: 1fr; } .stickyForecast { position: static; } }
 @media (max-width: 900px) { .plannerKpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .plannerMainGrid { grid-template-columns: 1fr; } .scenarioBar { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 640px) { .scenarioBar { grid-template-columns: 1fr; } .plannerKpis { grid-template-columns: 1fr; } .sourcesHead { flex-direction: column; } }
+
+
+/* planner relayout compact */
+.plannerWorkspaceStacked {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+.plannerConditionsColumn,
+.plannerCalcColumn {
+  display: contents;
+}
+
+.scenarioBar {
+  grid-template-columns: 170px 1fr 1fr 1fr minmax(250px, 1.1fr);
+  gap: 10px;
+  padding: 10px;
+}
+
+.scenarioBar label {
+  padding: 8px 10px;
+  gap: 6px;
+}
+
+.plannerKpis {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.plannerKpis > div {
+  padding: 10px 11px;
+  border-radius: 14px;
+}
+
+.plannerKpis b {
+  font-size: 16px;
+}
+
+.plannerMainGrid.compactGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.compactCard {
+  padding: 12px;
+  gap: 10px;
+}
+
+.compactCard .cardTitleRow h3 {
+  font-size: 16px;
+}
+
+.compactCard .cardTitleRow p {
+  font-size: 12px;
+}
+
+.kzMonthTotals > div,
+.salaryResults > div {
+  padding: 8px 9px;
+}
+
+.kzMonthTotals b,
+.salaryResults b {
+  font-size: 15px;
+}
+
+.compactBreakdown {
+  max-height: 150px;
+}
+
+.breakdownLine {
+  min-height: 26px;
+  font-size: 11px;
+}
+
+.salaryGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.salaryGrid label {
+  gap: 5px;
+  font-size: 12px;
+}
+
+.forecastBlock,
+.plannerSources {
+  width: 100%;
+}
+
+.plannerMatrixWrap {
+  max-height: 40vh;
+}
+
+.wideTableWrap {
+  max-height: 34vh;
+}
+
+.sourceTableWrap,
+.plannerMatrixWrap {
+  width: 100%;
+}
+
+@media (max-width: 1280px) {
+  .scenarioBar {
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+  }
+
+  .autoBalanceBox {
+    grid-column: 1 / -1;
+  }
+
+  .plannerKpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .plannerMainGrid.compactGrid,
+  .plannerKpis,
+  .scenarioBar {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .scenarioBar label,
+  .autoBalanceBox {
+    grid-column: auto;
+  }
+
+  .plannerMatrixWrap,
+  .wideTableWrap {
+    max-height: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .plannerMainGrid.compactGrid,
+  .plannerKpis,
+  .scenarioBar {
+    grid-template-columns: 1fr;
+  }
+}

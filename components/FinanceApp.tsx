@@ -1229,27 +1229,6 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
 
         {mainTab === "diary" && (
           <>
-        <section className="diaryMonthBar">
-          <div>
-            <h3>Период дневника</h3>
-            <span className="hint">Выбор месяца влияет только на дневник операций и его показатели.</span>
-          </div>
-          <div className="diaryMonthTools">
-            <button className="btn month-btn" disabled={monthIndex(viewMonth) <= monthIndex(diaryStart)} onClick={() => setViewMonth(addMonths(viewMonth, -1))}>
-              ←
-            </button>
-            <div className="diaryMonthPickerWrap">
-              <MonthPicker value={viewMonth} min={diaryStart} onChange={(value) => value && setViewMonth(value)} />
-            </div>
-            <button className="btn month-btn current" onClick={() => setViewMonth(currentMonth())}>
-              текущий
-            </button>
-            <button className="btn month-btn" onClick={() => setViewMonth(addMonths(viewMonth, 1))}>
-              →
-            </button>
-          </div>
-        </section>
-
         <section className="summaryGrid">
           <div className={`summaryCard ${before < 0 ? "negative" : ""}`}>
             <b>{fmt(before)}</b>
@@ -1270,13 +1249,28 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
         </section>
 
         <section className="workspace">
-          <section className="panel">
+          <section className="panel diaryPanel">
             <div className="panel-head">
               <div>
                 <h2>Дневник операций</h2>
                 <span className="hint">{doneCount} факт · {pendingCount} план</span>
               </div>
-              <div className="panel-tools">
+              <div className="panel-tools diaryPanelTools">
+                <div className="diaryMonthInline">
+                  <span className="hint">Период дневника</span>
+                  <button className="btn month-btn" disabled={monthIndex(viewMonth) <= monthIndex(diaryStart)} onClick={() => setViewMonth(addMonths(viewMonth, -1))}>
+                    ←
+                  </button>
+                  <div className="diaryMonthPickerWrap">
+                    <MonthPicker value={viewMonth} min={diaryStart} onChange={(value) => value && setViewMonth(value)} />
+                  </div>
+                  <button className="btn month-btn current" onClick={() => setViewMonth(currentMonth())}>
+                    текущий
+                  </button>
+                  <button className="btn month-btn" onClick={() => setViewMonth(addMonths(viewMonth, 1))}>
+                    →
+                  </button>
+                </div>
                 <button className="btn blue" onClick={openNewOperation}>+ операция</button>
               </div>
             </div>

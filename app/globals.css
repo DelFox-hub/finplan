@@ -249,6 +249,10 @@ select {
   width: 240px;
 }
 
+.diaryMonthInline .diaryMonthPickerWrap {
+  width: 210px;
+}
+
 .diaryMonthBar .monthPicker {
   grid-template-columns: minmax(0, 1fr) 88px 0px;
 }
@@ -377,6 +381,39 @@ select {
 .panel-tools {
   display: flex;
   gap: 6px;
+}
+
+
+.diaryPanel {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.diaryPanel .panel-head {
+  padding: 10px 14px;
+  flex-wrap: wrap;
+}
+
+.diaryPanelTools {
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.diaryMonthInline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #f8fafc;
+  flex-wrap: wrap;
+}
+
+.diaryMonthInline .hint {
+  white-space: nowrap;
+  margin-right: 2px;
 }
 
 
@@ -1486,6 +1523,19 @@ select {
 
   .diaryMonthPickerWrap {
     width: 100%;
+  }
+
+  .diaryPanelTools {
+    justify-content: stretch;
+  }
+
+  .diaryMonthInline {
+    width: 100%;
+  }
+
+  .diaryMonthInline .diaryMonthPickerWrap {
+    width: 100%;
+    min-width: 180px;
   }
 
   .month-inline {

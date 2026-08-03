@@ -10,7 +10,8 @@ type MonthPickerProps = {
 };
 
 const MONTH_OPTIONS = [
-  "янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"
+  "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+  "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
 ];
 
 function pad(n: number) {
@@ -77,7 +78,7 @@ export default function MonthPicker({ value, onChange, min, max, nullable = fals
         onChange={(event) => emit(yearValue || current.year, event.target.value)}
         aria-label="Месяц"
       >
-        {nullable && <option value="">мес.</option>}
+        {nullable && <option value="">Месяц</option>}
         {MONTH_OPTIONS.map((label, index) => (
           <option key={label} value={index + 1} disabled={monthDisabled(index + 1)}>{label}</option>
         ))}
@@ -87,7 +88,7 @@ export default function MonthPicker({ value, onChange, min, max, nullable = fals
         onChange={(event) => emit(event.target.value, monthValue || current.month)}
         aria-label="Год"
       >
-        {nullable && <option value="">год</option>}
+        {nullable && <option value="">Год</option>}
         {years.map((year) => (
           <option key={year} value={year}>{year}</option>
         ))}

@@ -828,9 +828,10 @@ select {
 }
 
 .settingsModal {
-  width: min(1180px, calc(100vw - 32px));
-  height: min(840px, calc(100vh - 32px));
-  max-height: calc(100vh - 32px);
+  width: min(1580px, calc(100vw - 16px));
+  height: calc(100vh - 16px);
+  max-width: none;
+  max-height: calc(100vh - 16px);
   padding: 0;
   gap: 0;
   overflow: hidden;
@@ -958,7 +959,7 @@ select {
 .settingsLayout {
   min-height: 0;
   display: grid;
-  grid-template-columns: 190px minmax(0, 1fr);
+  grid-template-columns: 168px minmax(0, 1fr);
 }
 
 .settingsNav {
@@ -998,7 +999,7 @@ select {
   min-width: 0;
   min-height: 0;
   overflow: auto;
-  padding: 18px 20px 24px;
+  padding: 14px 16px 20px;
   background: #fff;
 }
 
@@ -1122,20 +1123,21 @@ select {
 
 
 .settingsCompactTable .monthPicker {
-  grid-template-columns: minmax(0, 1fr) 62px 22px;
+  grid-template-columns: minmax(92px, 1fr) 78px 26px;
+  gap: 5px;
 }
 
 .settingsCompactTable .monthPicker select {
-  height: 30px;
-  font-size: 11px;
-  padding: 0 5px;
+  height: 32px;
+  font-size: 12px;
+  padding: 0 7px;
 }
 
 .settingsCompactTable .monthPickerClear,
 .settingsCompactTable .monthPickerStub {
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
 }
 
 .settingsCompactTable th:nth-child(2),
@@ -1150,34 +1152,34 @@ select {
 }
 
 
-.paymentsTable th:nth-child(1), .paymentsTable td:nth-child(1) { width: 34px; }
-.paymentsTable th:nth-child(2), .paymentsTable td:nth-child(2) { width: 23%; }
+.paymentsTable th:nth-child(1), .paymentsTable td:nth-child(1) { width: 38px; }
+.paymentsTable th:nth-child(2), .paymentsTable td:nth-child(2) { width: 24%; }
 .paymentsTable th:nth-child(3), .paymentsTable td:nth-child(3) { width: 18%; }
-.paymentsTable th:nth-child(4), .paymentsTable td:nth-child(4) { width: 12%; }
-.paymentsTable th:nth-child(5), .paymentsTable td:nth-child(5) { width: 8%; }
-.paymentsTable th:nth-child(6), .paymentsTable td:nth-child(6) { width: 16%; }
-.paymentsTable th:nth-child(7), .paymentsTable td:nth-child(7) { width: 16%; }
-.paymentsTable th:nth-child(8), .paymentsTable td:nth-child(8) { width: 34px; }
+.paymentsTable th:nth-child(4), .paymentsTable td:nth-child(4) { width: 130px; }
+.paymentsTable th:nth-child(5), .paymentsTable td:nth-child(5) { width: 74px; }
+.paymentsTable th:nth-child(6), .paymentsTable td:nth-child(6) { width: 220px; }
+.paymentsTable th:nth-child(7), .paymentsTable td:nth-child(7) { width: 220px; }
+.paymentsTable th:nth-child(8), .paymentsTable td:nth-child(8) { width: 38px; }
 
-.incomeTable th:nth-child(1), .incomeTable td:nth-child(1) { width: 34px; }
-.incomeTable th:nth-child(2), .incomeTable td:nth-child(2) { width: 19%; }
+.incomeTable th:nth-child(1), .incomeTable td:nth-child(1) { width: 38px; }
+.incomeTable th:nth-child(2), .incomeTable td:nth-child(2) { width: 20%; }
 .incomeTable th:nth-child(3), .incomeTable td:nth-child(3) { width: 15%; }
-.incomeTable th:nth-child(4), .incomeTable td:nth-child(4) { width: 11%; }
-.incomeTable th:nth-child(5), .incomeTable td:nth-child(5) { width: 13%; }
-.incomeTable th:nth-child(6), .incomeTable td:nth-child(6) { width: 8%; }
-.incomeTable th:nth-child(7), .incomeTable td:nth-child(7) { width: 14%; }
-.incomeTable th:nth-child(8), .incomeTable td:nth-child(8) { width: 14%; }
-.incomeTable th:nth-child(9), .incomeTable td:nth-child(9) { width: 34px; }
+.incomeTable th:nth-child(4), .incomeTable td:nth-child(4) { width: 120px; }
+.incomeTable th:nth-child(5), .incomeTable td:nth-child(5) { width: 150px; }
+.incomeTable th:nth-child(6), .incomeTable td:nth-child(6) { width: 74px; }
+.incomeTable th:nth-child(7), .incomeTable td:nth-child(7) { width: 220px; }
+.incomeTable th:nth-child(8), .incomeTable td:nth-child(8) { width: 220px; }
+.incomeTable th:nth-child(9), .incomeTable td:nth-child(9) { width: 38px; }
 
-.creditTable th:nth-child(1), .creditTable td:nth-child(1) { width: 34px; }
-.creditTable th:nth-child(2), .creditTable td:nth-child(2) { width: 20%; }
-.creditTable th:nth-child(3), .creditTable td:nth-child(3) { width: 15%; }
-.creditTable th:nth-child(4), .creditTable td:nth-child(4) { width: 12%; }
-.creditTable th:nth-child(5), .creditTable td:nth-child(5) { width: 9%; }
-.creditTable th:nth-child(6), .creditTable td:nth-child(6) { width: 11%; }
-.creditTable th:nth-child(7), .creditTable td:nth-child(7) { width: 11%; }
-.creditTable th:nth-child(8), .creditTable td:nth-child(8) { width: 14%; }
-.creditTable th:nth-child(9), .creditTable td:nth-child(9) { width: 34px; }
+.creditTable th:nth-child(1), .creditTable td:nth-child(1) { width: 38px; }
+.creditTable th:nth-child(2), .creditTable td:nth-child(2) { width: 22%; }
+.creditTable th:nth-child(3), .creditTable td:nth-child(3) { width: 16%; }
+.creditTable th:nth-child(4), .creditTable td:nth-child(4) { width: 120px; }
+.creditTable th:nth-child(5), .creditTable td:nth-child(5) { width: 74px; }
+.creditTable th:nth-child(6), .creditTable td:nth-child(6) { width: 106px; }
+.creditTable th:nth-child(7), .creditTable td:nth-child(7) { width: 100px; }
+.creditTable th:nth-child(8), .creditTable td:nth-child(8) { width: 220px; }
+.creditTable th:nth-child(9), .creditTable td:nth-child(9) { width: 38px; }
 
 .creditsSidebar {
   background: #fbfcff;
@@ -1422,11 +1424,44 @@ select {
   font-weight: 600;
 }
 
+@media (max-width: 1350px) and (min-width: 901px) {
+  .settingsModal {
+    width: calc(100vw - 12px);
+    height: calc(100vh - 12px);
+    max-height: calc(100vh - 12px);
+  }
+
+  .settingsLayout {
+    grid-template-columns: 150px minmax(0, 1fr);
+  }
+
+  .settingsContent {
+    padding: 12px;
+  }
+
+  .settingsCompactTable th,
+  .settingsCompactTable td {
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+}
+
 @media (max-width: 900px) {
   .settingsModal {
     width: calc(100vw - 20px);
     height: calc(100vh - 20px);
     max-height: calc(100vh - 20px);
+  }
+
+
+  .settingsCompactTableWrap {
+    overflow-x: auto;
+  }
+
+  .paymentsTable,
+  .creditTable,
+  .incomeTable {
+    min-width: 1120px;
   }
 
   .settingsLayout {

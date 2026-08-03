@@ -1009,6 +1009,50 @@ select {
   background: #fff;
 }
 
+
+.settingsContentTableMode {
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.settingsContentTableMode > .settingsSection {
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.settingsContentTableMode .settingsTableCard {
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.settingsContentTableMode .settingsCompactTableWrap {
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+}
+
+.settingsContentTableMode .categorySettings {
+  height: 100%;
+  min-height: 0;
+  align-items: stretch;
+}
+
+.settingsContentTableMode .categoryColumn {
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.settingsContentTableMode .categoryTableWrap {
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+}
+
 .settingsSection {
   display: grid;
   gap: 14px;
@@ -1069,7 +1113,7 @@ select {
   overflow-y: auto;
   border: 1px solid var(--line);
   border-radius: 12px;
-  max-height: 50vh;
+  max-height: 68vh;
 }
 
 .settingsCompactTable {
@@ -1098,6 +1142,112 @@ select {
   font-weight: 700;
   white-space: normal;
   line-height: 1.2;
+}
+
+
+.settingsCompactTable thead tr:first-child th {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+}
+
+.settingsCompactTable thead .settingsFilterRow th {
+  position: sticky;
+  top: 35px;
+  z-index: 3;
+  padding: 4px;
+  background: #eef3f9;
+}
+
+
+.settingsCompactTable thead tr:first-child th {
+  height: 35px;
+  box-shadow: 0 1px 0 var(--line);
+}
+
+.settingsCompactTable thead .settingsFilterRow th {
+  height: 38px;
+  box-shadow: 0 2px 4px rgba(15, 23, 42, .06);
+}
+
+.settingsSortButton {
+  width: 100%;
+  min-width: 0;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.settingsSortButton span {
+  flex: 0 0 auto;
+  color: #3154b8;
+  font-size: 13px;
+}
+
+.settingsSortButton:hover {
+  color: #172033;
+}
+
+.settingsFilterRow input,
+.settingsFilterRow select {
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  border: 1px solid #cfd8e6;
+  border-radius: 7px;
+  background: #fff;
+  padding: 0 5px;
+  font-size: 11px;
+  color: var(--text);
+}
+
+.settingsFilterRow input::placeholder {
+  color: #94a3b8;
+}
+
+.settingsFilterRow .monthPicker {
+  grid-template-columns: minmax(88px, 1fr) 70px 22px;
+  gap: 3px;
+}
+
+.settingsFilterRow .monthPicker select {
+  height: 28px;
+  padding: 0 5px;
+  font-size: 10px;
+}
+
+.settingsFilterRow .monthPickerClear {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.settingsFilterReset {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #cfd8e6;
+  border-radius: 8px;
+  background: #fff;
+  color: #64748b;
+  font-size: 17px;
+  line-height: 1;
+  font-weight: 700;
+}
+
+.settingsFilterReset:hover {
+  border-color: #f1c7c3;
+  background: var(--red-soft);
+  color: var(--red);
 }
 
 .settingsCompactTable td:last-child,
@@ -1166,8 +1316,8 @@ select {
 }
 
 
-.paymentsTable th:nth-child(1), .paymentsTable td:nth-child(1) { width: 3%; }
-.paymentsTable th:nth-child(2), .paymentsTable td:nth-child(2) { width: 18%; }
+.paymentsTable th:nth-child(1), .paymentsTable td:nth-child(1) { width: 5%; }
+.paymentsTable th:nth-child(2), .paymentsTable td:nth-child(2) { width: 16%; }
 .paymentsTable th:nth-child(3), .paymentsTable td:nth-child(3) { width: 14%; }
 .paymentsTable th:nth-child(4), .paymentsTable td:nth-child(4) { width: 9%; }
 .paymentsTable th:nth-child(5), .paymentsTable td:nth-child(5) { width: 6%; }
@@ -1175,8 +1325,8 @@ select {
 .paymentsTable th:nth-child(7), .paymentsTable td:nth-child(7) { width: 23%; }
 .paymentsTable th:nth-child(8), .paymentsTable td:nth-child(8) { width: 4%; }
 
-.incomeTable th:nth-child(1), .incomeTable td:nth-child(1) { width: 3%; }
-.incomeTable th:nth-child(2), .incomeTable td:nth-child(2) { width: 15%; }
+.incomeTable th:nth-child(1), .incomeTable td:nth-child(1) { width: 5%; }
+.incomeTable th:nth-child(2), .incomeTable td:nth-child(2) { width: 13%; }
 .incomeTable th:nth-child(3), .incomeTable td:nth-child(3) { width: 12%; }
 .incomeTable th:nth-child(4), .incomeTable td:nth-child(4) { width: 8%; }
 .incomeTable th:nth-child(5), .incomeTable td:nth-child(5) { width: 11%; }
@@ -1185,8 +1335,8 @@ select {
 .incomeTable th:nth-child(8), .incomeTable td:nth-child(8) { width: 21%; }
 .incomeTable th:nth-child(9), .incomeTable td:nth-child(9) { width: 4%; }
 
-.creditTable th:nth-child(1), .creditTable td:nth-child(1) { width: 3%; }
-.creditTable th:nth-child(2), .creditTable td:nth-child(2) { width: 18%; }
+.creditTable th:nth-child(1), .creditTable td:nth-child(1) { width: 5%; }
+.creditTable th:nth-child(2), .creditTable td:nth-child(2) { width: 16%; }
 .creditTable th:nth-child(3), .creditTable td:nth-child(3) { width: 14%; }
 .creditTable th:nth-child(4), .creditTable td:nth-child(4) { width: 9%; }
 .creditTable th:nth-child(5), .creditTable td:nth-child(5) { width: 6%; }
@@ -1370,6 +1520,33 @@ select {
   gap: 10px;
 }
 
+
+.categoryTableWrap {
+  max-height: 54vh;
+  background: #fff;
+}
+
+.categoryTable th:nth-child(1),
+.categoryTable td:nth-child(1) {
+  width: 12%;
+}
+
+.categoryTable th:nth-child(2),
+.categoryTable td:nth-child(2) {
+  width: 80%;
+}
+
+.categoryTable th:nth-child(3),
+.categoryTable td:nth-child(3) {
+  width: 8%;
+}
+
+.categoryIndexCell {
+  color: #64748b;
+  text-align: center;
+  font-weight: 700;
+}
+
 .categoryColumnHead {
   display: flex;
   align-items: center;
@@ -1461,6 +1638,23 @@ select {
 }
 
 @media (max-width: 900px) {
+  .settingsContentTableMode {
+    overflow: auto;
+    display: block;
+  }
+
+  .settingsContentTableMode > .settingsSection,
+  .settingsContentTableMode .settingsTableCard,
+  .settingsContentTableMode .categorySettings,
+  .settingsContentTableMode .categoryColumn {
+    height: auto;
+  }
+
+  .settingsContentTableMode .settingsCompactTableWrap,
+  .settingsContentTableMode .categoryTableWrap {
+    height: auto;
+    max-height: 60vh;
+  }
   .settingsModal {
     width: calc(100vw - 20px);
     height: calc(100vh - 20px);
@@ -1726,13 +1920,13 @@ select {
 
 /* Relocation planner */
 .relocationPanel {
-  background: rgba(255, 255, 255, .92);
+  background: rgba(255, 255, 255, .94);
   border: 1px solid var(--line);
   border-radius: 22px;
   box-shadow: var(--shadow);
   padding: 16px;
   display: grid;
-  gap: 14px;
+  gap: 12px;
   min-width: 0;
 }
 
@@ -1815,12 +2009,12 @@ select {
 
 .scenarioBar {
   display: grid;
-  grid-template-columns: repeat(4, minmax(140px, 1fr)) minmax(200px, 1.3fr);
+  grid-template-columns: repeat(4, minmax(140px, 1fr)) minmax(220px, 1.2fr);
   gap: 10px;
   padding: 12px;
-  border: 1px solid var(--line);
+  border: 1px solid #e8edf5;
   border-radius: 18px;
-  background: #f8fafc;
+  background: linear-gradient(180deg, #fbfcfe 0%, #f8fafc 100%);
 }
 
 .autoBalanceBox {
@@ -1877,6 +2071,35 @@ select {
   overflow-wrap: anywhere;
 }
 
+
+.plannerQuickMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.plannerQuickMeta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid #e6ebf3;
+  background: #fff;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.plannerQuickMeta b {
+  color: var(--text);
+}
+
+.plannerQuickMeta.subtle {
+  margin-top: -4px;
+}
+
 .plannerMainGrid {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(340px, .85fr);
@@ -1885,7 +2108,7 @@ select {
 
 .plannerWorkspace {
   display: grid;
-  grid-template-columns: minmax(0, 1.08fr) minmax(420px, .92fr);
+  grid-template-columns: minmax(0, 1.02fr) minmax(440px, .98fr);
   gap: 12px;
   align-items: start;
 }
@@ -1920,7 +2143,7 @@ select {
 .plannerCard,
 .plannerSources,
 .forecastBlock {
-  border: 1px solid var(--line);
+  border: 1px solid #e8edf5;
   border-radius: 18px;
   background: #fff;
   padding: 13px;
@@ -1928,6 +2151,7 @@ select {
   gap: 12px;
   min-width: 0;
   align-content: start;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, .04);
 }
 
 .kzSyncCard {
@@ -2054,9 +2278,10 @@ select {
 .sourceTableWrap,
 .plannerMatrixWrap {
   overflow: auto;
-  border: 1px solid var(--line);
+  border: 1px solid #e8edf5;
   border-radius: 16px;
   max-height: 72vh;
+  background: #fff;
 }
 
 .sourceTable,
@@ -2084,6 +2309,9 @@ select {
   color: var(--muted);
   font-weight: 700;
   white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 
 .sourceTable td {
@@ -2110,11 +2338,15 @@ select {
 }
 
 .sourceTable tr.income td {
-  background: #fbfffd;
+  background: #fcfffd;
 }
 
 .sourceTable tr.expense td {
-  background: #fffafa;
+  background: #fffdfd;
+}
+
+.sourceTable tbody tr:hover td {
+  background: #f8fbff;
 }
 
 .sourceTable input:disabled {
@@ -2248,6 +2480,25 @@ select {
 .plannerMatrix .cumulativeRow th,
 .plannerMatrix .cumulativeRow td {
   background: #fff7d6;
+}
+
+
+.plannerMatrix .countrySection th,
+.plannerMatrix .countrySection td {
+  background: #172033;
+  color: #fff;
+  font-weight: 700;
+}
+
+.plannerMatrix .detailRow th,
+.plannerMatrix .detailRow td {
+  background: #fcfdff;
+  color: #5b6473;
+}
+
+.plannerMatrix .detailRow:nth-child(even) th,
+.plannerMatrix .detailRow:nth-child(even) td {
+  background: #fafcff;
 }
 
 .plannerMatrix .countrySection th,
@@ -2397,3 +2648,9 @@ select {
     grid-template-rows: auto minmax(0, 1fr);
   }
 }
+
+.matrixCurrencyTools { display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+.matrixCurrencyTools > span { color: var(--muted); font-size: 11px; font-weight:700; }
+.currencyToggle { display:inline-flex; align-items:center; border:1px solid #d8e1ef; border-radius: 12px; overflow:hidden; background:#f8fafc; }
+.currencyToggle button { height:32px; padding:0 10px; border:0; background:transparent; color:var(--muted); font-weight:700; }
+.currencyToggle button.active { background:#172033; color:#fff; }

@@ -260,6 +260,26 @@ function pickLegacyState(input: any) {
   return input?.state || input?.data || input?.financeDiary || input || {};
 }
 
+type SettingsTableKey = "payments" | "credits" | "incomes" | "expenseCategories" | "incomeCategories";
+type SettingsSortDirection = "asc" | "desc";
+type SettingsTableSort = { key: string; direction: SettingsSortDirection };
+
+function matchesText(value: unknown, query: string) {
+  return !query.trim() || String(value ?? "").toLocaleLowerCase("ru-RU").includes(query.trim().toLocaleLowerCase("ru-RU"));
+}
+
+function matchesExactNumber(value: unknown, query: string) {
+  if (!query.trim()) return true;
+  const expected = Number(query.replace(",", "."));
+  return Number.isFinite(expected) && Number(value || 0) === expected;
+}
+
+function compareSettingsValues(left: unknown, right: unknown) {
+  if (typeof left === "number" && typeof right === "number") return left - right;
+  if (typeof left === "boolean" && typeof right === "boolean") return Number(left) - Number(right);
+  return String(left ?? "").localeCompare(String(right ?? ""), "ru", { numeric: true, sensitivity: "base" });
+}
+
 
 export default function FinanceApp({ userId, userEmail }: { userId: string; userEmail: string }) {
   const [loading, setLoading] = useState(true);
@@ -281,6 +301,20 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
   const [saveState, setSaveState] = useState<{ status: "saved" | "saving" | "error"; message: string }>({
     status: "saved",
     message: "Все изменения сохранены"
+  });
+  const [settingsTableFilters, setSettingsTableFilters] = useState<Record<SettingsTableKey, Record<string, string>>>({
+    payments: { active: "all", title: "", category: "", amount: "", due_day: "", from: "", to: "" },
+    credits: { active: "all", title: "", category: "", amount: "", due_day: "", total_months: "", paid_months: "", from: "" },
+    incomes: { active: "all", title: "", category: "", amount: "", frequency: "", due_day: "", from: "", to: "" },
+    expenseCategories: { name: "" },
+    incomeCategories: { name: "" }
+  });
+  const [settingsTableSorts, setSettingsTableSorts] = useState<Record<SettingsTableKey, SettingsTableSort>>({
+    payments: { key: "sort_order", direction: "asc" },
+    credits: { key: "sort_order", direction: "asc" },
+    incomes: { key: "sort_order", direction: "asc" },
+    expenseCategories: { key: "sort_order", direction: "asc" },
+    incomeCategories: { key: "sort_order", direction: "asc" }
   });
   const [opModalOpen, setOpModalOpen] = useState(false);
   const [editingOperationId, setEditingOperationId] = useState<string | null>(null);
@@ -313,6 +347,39 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
 
   function safeViewMonth(month: string, start = diaryStart) {
     return monthIndex(month) < monthIndex(start) ? start : month;
+  }
+
+  function setSettingsTableFilter(table: SettingsTableKey, key: string, value: string) {
+    setSettingsTableFilters((current) => ({
+      ...current,
+      [table]: { ...current[table], [key]: value }
+    }));
+  }
+
+  function resetSettingsTableFilters(table: SettingsTableKey) {
+    setSettingsTableFilters((current) => ({
+      ...current,
+      [table]: Object.fromEntries(Object.keys(current[table]).map((key) => [key, key === "active" ? "all" : ""]))
+    }));
+  }
+
+  function toggleSettingsTableSort(table: SettingsTableKey, key: string) {
+    setSettingsTableSorts((current) => {
+      const previous = current[table];
+      return {
+        ...current,
+        [table]: {
+          key,
+          direction: previous.key === key && previous.direction === "asc" ? "desc" : "asc"
+        }
+      };
+    });
+  }
+
+  function settingsSortMark(table: SettingsTableKey, key: string) {
+    const sort = settingsTableSorts[table];
+    if (sort.key !== key) return "↕";
+    return sort.direction === "asc" ? "↑" : "↓";
   }
 
   async function loadAll() {
@@ -1176,6 +1243,110 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
   const regularPayments = useMemo(() => payments.filter((p) => p.payment_type !== "credit"), [payments]);
   const creditPayments = useMemo(() => payments.filter((p) => p.payment_type === "credit"), [payments]);
 
+  const visibleRegularPayments = useMemo(() => {
+    const filters = settingsTableFilters.payments;
+    const sort = settingsTableSorts.payments;
+    const rows = regularPayments.filter((payment) => {
+      const activeMatches = filters.active === "all" || (filters.active === "active" ? payment.active : !payment.active);
+      return activeMatches
+        && matchesText(payment.title, filters.title)
+        && (!filters.category || payment.category_id === filters.category)
+        && matchesExactNumber(payment.amount, filters.amount)
+        && matchesExactNumber(payment.due_day, filters.due_day)
+        && (!filters.from || normalizeMonth(payment.valid_from_month) === filters.from)
+        && (!filters.to || normalizeMonth(payment.valid_to_month) === filters.to);
+    });
+    const value = (payment: RecurringPayment) => {
+      switch (sort.key) {
+        case "active": return payment.active;
+        case "title": return payment.title;
+        case "category": return categoryName(expenseCategories, payment.category_id, "");
+        case "amount": return Number(payment.amount || 0);
+        case "due_day": return Number(payment.due_day || 0);
+        case "from": return normalizeMonth(payment.valid_from_month) || "";
+        case "to": return normalizeMonth(payment.valid_to_month) || "";
+        default: return Number(payment.sort_order || 0);
+      }
+    };
+    return [...rows].sort((left, right) => compareSettingsValues(value(left), value(right)) * (sort.direction === "asc" ? 1 : -1));
+  }, [regularPayments, expenseCategories, settingsTableFilters.payments, settingsTableSorts.payments]);
+
+  const visibleCreditPayments = useMemo(() => {
+    const filters = settingsTableFilters.credits;
+    const sort = settingsTableSorts.credits;
+    const rows = creditPayments.filter((payment) => {
+      const activeMatches = filters.active === "all" || (filters.active === "active" ? payment.active : !payment.active);
+      return activeMatches
+        && matchesText(payment.title, filters.title)
+        && (!filters.category || payment.category_id === filters.category)
+        && matchesExactNumber(payment.amount, filters.amount)
+        && matchesExactNumber(payment.due_day, filters.due_day)
+        && matchesExactNumber(payment.total_months, filters.total_months)
+        && matchesExactNumber(payment.paid_months, filters.paid_months)
+        && (!filters.from || normalizeMonth(payment.valid_from_month) === filters.from);
+    });
+    const value = (payment: RecurringPayment) => {
+      switch (sort.key) {
+        case "active": return payment.active;
+        case "title": return payment.title;
+        case "category": return categoryName(expenseCategories, payment.category_id, "");
+        case "amount": return Number(payment.amount || 0);
+        case "due_day": return Number(payment.due_day || 0);
+        case "total_months": return Number(payment.total_months || 0);
+        case "paid_months": return Number(payment.paid_months || 0);
+        case "from": return normalizeMonth(payment.valid_from_month) || "";
+        default: return Number(payment.sort_order || 0);
+      }
+    };
+    return [...rows].sort((left, right) => compareSettingsValues(value(left), value(right)) * (sort.direction === "asc" ? 1 : -1));
+  }, [creditPayments, expenseCategories, settingsTableFilters.credits, settingsTableSorts.credits]);
+
+  const visibleIncomes = useMemo(() => {
+    const filters = settingsTableFilters.incomes;
+    const sort = settingsTableSorts.incomes;
+    const rows = incomes.filter((income) => {
+      const activeMatches = filters.active === "all" || (filters.active === "active" ? income.active : !income.active);
+      return activeMatches
+        && matchesText(income.title, filters.title)
+        && (!filters.category || income.category_id === filters.category)
+        && matchesExactNumber(income.amount, filters.amount)
+        && (!filters.frequency || income.frequency === filters.frequency)
+        && matchesExactNumber(income.due_day, filters.due_day)
+        && (!filters.from || normalizeMonth(income.valid_from_month) === filters.from)
+        && (!filters.to || normalizeMonth(income.valid_to_month) === filters.to);
+    });
+    const value = (income: RecurringIncome) => {
+      switch (sort.key) {
+        case "active": return income.active;
+        case "title": return income.title;
+        case "category": return categoryName(incomeCategories, income.category_id, "");
+        case "amount": return Number(income.amount || 0);
+        case "frequency": return freqLabels[income.frequency];
+        case "due_day": return Number(income.due_day || 0);
+        case "from": return normalizeMonth(income.valid_from_month) || "";
+        case "to": return normalizeMonth(income.valid_to_month) || "";
+        default: return Number(income.sort_order || 0);
+      }
+    };
+    return [...rows].sort((left, right) => compareSettingsValues(value(left), value(right)) * (sort.direction === "asc" ? 1 : -1));
+  }, [incomes, incomeCategories, settingsTableFilters.incomes, settingsTableSorts.incomes]);
+
+  const visibleExpenseCategories = useMemo(() => {
+    const filters = settingsTableFilters.expenseCategories;
+    const sort = settingsTableSorts.expenseCategories;
+    const rows = expenseCategories.filter((category) => matchesText(category.name, filters.name));
+    const value = (category: Category) => sort.key === "name" ? category.name : Number(category.sort_order || 0);
+    return [...rows].sort((left, right) => compareSettingsValues(value(left), value(right)) * (sort.direction === "asc" ? 1 : -1));
+  }, [expenseCategories, settingsTableFilters.expenseCategories, settingsTableSorts.expenseCategories]);
+
+  const visibleIncomeCategories = useMemo(() => {
+    const filters = settingsTableFilters.incomeCategories;
+    const sort = settingsTableSorts.incomeCategories;
+    const rows = incomeCategories.filter((category) => matchesText(category.name, filters.name));
+    const value = (category: Category) => sort.key === "name" ? category.name : Number(category.sort_order || 0);
+    return [...rows].sort((left, right) => compareSettingsValues(value(left), value(right)) * (sort.direction === "asc" ? 1 : -1));
+  }, [incomeCategories, settingsTableFilters.incomeCategories, settingsTableSorts.incomeCategories]);
+
   const incomeRowNames = useMemo(() => {
     const names = new Set<string>();
     forecast.forEach((m) => Object.entries(m.incomeBy).forEach(([k, v]) => Number(v) !== 0 && names.add(k)));
@@ -1474,7 +1645,7 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
                 <button type="button" className={settingsTab === "import" ? "active" : ""} onClick={() => setSettingsTab("import")}>Импорт</button>
               </nav>
 
-              <section className="settingsContent">
+              <section className={`settingsContent ${["expenses", "credits", "incomes", "categories"].includes(settingsTab) ? "settingsContentTableMode" : ""}`}>
                 {settingsTab === "main" && (
                   <div className="settingsSection">
                     <div className="settingsSectionHead">
@@ -1510,18 +1681,35 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
                       <div className="tableCardHead">
                         <div>
                           <h5>Платежи</h5>
-                          <span>{regularPayments.length} строк</span>
+                          <span>{visibleRegularPayments.length} из {regularPayments.length}</span>
                         </div>
                       </div>
                       <div className="settingsCompactTableWrap">
                         <table className="settingsCompactTable paymentsTable">
                           <thead>
-                            <tr>
-                              <th>on</th><th>Название</th><th>Статья</th><th>Сумма</th><th>День</th><th>С</th><th>До</th><th></th>
+                            <tr className="settingsSortRow">
+                              <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("payments", "active")}>on <span>{settingsSortMark("payments", "active")}</span></button></th>
+                              <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("payments", "title")}>Название <span>{settingsSortMark("payments", "title")}</span></button></th>
+                              <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("payments", "category")}>Статья <span>{settingsSortMark("payments", "category")}</span></button></th>
+                              <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("payments", "amount")}>Сумма <span>{settingsSortMark("payments", "amount")}</span></button></th>
+                              <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("payments", "due_day")}>День <span>{settingsSortMark("payments", "due_day")}</span></button></th>
+                              <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("payments", "from")}>С <span>{settingsSortMark("payments", "from")}</span></button></th>
+                              <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("payments", "to")}>До <span>{settingsSortMark("payments", "to")}</span></button></th>
+                              <th></th>
+                            </tr>
+                            <tr className="settingsFilterRow">
+                              <th><select aria-label="Фильтр активности платежей" value={settingsTableFilters.payments.active} onChange={(e) => setSettingsTableFilter("payments", "active", e.target.value)}><option value="all">Все</option><option value="active">Вкл</option><option value="inactive">Выкл</option></select></th>
+                              <th><input aria-label="Фильтр платежей по названию" placeholder="Поиск" value={settingsTableFilters.payments.title} onChange={(e) => setSettingsTableFilter("payments", "title", e.target.value)} /></th>
+                              <th><select aria-label="Фильтр платежей по статье" value={settingsTableFilters.payments.category} onChange={(e) => setSettingsTableFilter("payments", "category", e.target.value)}><option value="">Все статьи</option>{expenseCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></th>
+                              <th><input aria-label="Фильтр платежей по сумме" type="number" placeholder="=" value={settingsTableFilters.payments.amount} onChange={(e) => setSettingsTableFilter("payments", "amount", e.target.value)} /></th>
+                              <th><input aria-label="Фильтр платежей по дню" type="number" min="1" max="31" placeholder="=" value={settingsTableFilters.payments.due_day} onChange={(e) => setSettingsTableFilter("payments", "due_day", e.target.value)} /></th>
+                              <th><MonthPicker value={settingsTableFilters.payments.from || null} onChange={(value) => setSettingsTableFilter("payments", "from", value || "")} nullable className="filterMonthPicker" /></th>
+                              <th><MonthPicker value={settingsTableFilters.payments.to || null} onChange={(value) => setSettingsTableFilter("payments", "to", value || "")} nullable className="filterMonthPicker" /></th>
+                              <th><button type="button" className="settingsFilterReset" aria-label="Очистить фильтры платежей" title="Очистить фильтры" onClick={() => resetSettingsTableFilters("payments")}>×</button></th>
                             </tr>
                           </thead>
                           <tbody>
-                            {regularPayments.map((p) => (
+                            {visibleRegularPayments.map((p) => (
                               <tr key={p.id} className={p.active ? "" : "inactive"}>
                                 <td><input type="checkbox" checked={p.active} onChange={(e) => updatePayment(p.id, { active: e.target.checked })} /></td>
                                 <td><input value={p.title} onChange={(e) => updatePayment(p.id, { title: e.target.value })} /></td>
@@ -1533,7 +1721,7 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
                                 <td><button type="button" className="iconDelete mini" aria-label={`Удалить ${p.title}`} onClick={() => deletePayment(p.id)}>×</button></td>
                               </tr>
                             ))}
-                            {!regularPayments.length && <tr><td colSpan={8}><div className="settingsEmpty slim">Регулярных платежей пока нет.</div></td></tr>}
+                            {!visibleRegularPayments.length && <tr><td colSpan={8}><div className="settingsEmpty slim">{regularPayments.length ? "По фильтрам ничего не найдено." : "Регулярных платежей пока нет."}</div></td></tr>}
                           </tbody>
                         </table>
                       </div>
@@ -1557,18 +1745,37 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
                       <div className="tableCardHead">
                         <div>
                           <h5>Кредиты</h5>
-                          <span>{creditPayments.length} строк</span>
+                          <span>{visibleCreditPayments.length} из {creditPayments.length}</span>
                         </div>
                       </div>
                       <div className="settingsCompactTableWrap">
                         <table className="settingsCompactTable creditTable">
                           <thead>
-                            <tr>
-                              <th>on</th><th>Название</th><th>Статья</th><th>Сумма</th><th>День</th><th>Всего мес.</th><th>Оплачено</th><th>С</th><th></th>
+                            <tr className="settingsSortRow">
+                              <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("credits", "active")}>on <span>{settingsSortMark("credits", "active")}</span></button></th>
+                              <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("credits", "title")}>Название <span>{settingsSortMark("credits", "title")}</span></button></th>
+                              <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("credits", "category")}>Статья <span>{settingsSortMark("credits", "category")}</span></button></th>
+                              <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("credits", "amount")}>Сумма <span>{settingsSortMark("credits", "amount")}</span></button></th>
+                              <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("credits", "due_day")}>День <span>{settingsSortMark("credits", "due_day")}</span></button></th>
+                              <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("credits", "total_months")}>Всего мес. <span>{settingsSortMark("credits", "total_months")}</span></button></th>
+                              <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("credits", "paid_months")}>Оплачено <span>{settingsSortMark("credits", "paid_months")}</span></button></th>
+                              <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("credits", "from")}>С <span>{settingsSortMark("credits", "from")}</span></button></th>
+                              <th></th>
+                            </tr>
+                            <tr className="settingsFilterRow">
+                              <th><select aria-label="Фильтр активности кредитов" value={settingsTableFilters.credits.active} onChange={(e) => setSettingsTableFilter("credits", "active", e.target.value)}><option value="all">Все</option><option value="active">Вкл</option><option value="inactive">Выкл</option></select></th>
+                              <th><input aria-label="Фильтр кредитов по названию" placeholder="Поиск" value={settingsTableFilters.credits.title} onChange={(e) => setSettingsTableFilter("credits", "title", e.target.value)} /></th>
+                              <th><select aria-label="Фильтр кредитов по статье" value={settingsTableFilters.credits.category} onChange={(e) => setSettingsTableFilter("credits", "category", e.target.value)}><option value="">Все статьи</option>{expenseCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></th>
+                              <th><input aria-label="Фильтр кредитов по сумме" type="number" placeholder="=" value={settingsTableFilters.credits.amount} onChange={(e) => setSettingsTableFilter("credits", "amount", e.target.value)} /></th>
+                              <th><input aria-label="Фильтр кредитов по дню" type="number" min="1" max="31" placeholder="=" value={settingsTableFilters.credits.due_day} onChange={(e) => setSettingsTableFilter("credits", "due_day", e.target.value)} /></th>
+                              <th><input aria-label="Фильтр кредитов по общей длительности" type="number" min="0" placeholder="=" value={settingsTableFilters.credits.total_months} onChange={(e) => setSettingsTableFilter("credits", "total_months", e.target.value)} /></th>
+                              <th><input aria-label="Фильтр кредитов по оплаченным месяцам" type="number" min="0" placeholder="=" value={settingsTableFilters.credits.paid_months} onChange={(e) => setSettingsTableFilter("credits", "paid_months", e.target.value)} /></th>
+                              <th><MonthPicker value={settingsTableFilters.credits.from || null} onChange={(value) => setSettingsTableFilter("credits", "from", value || "")} nullable className="filterMonthPicker" /></th>
+                              <th><button type="button" className="settingsFilterReset" aria-label="Очистить фильтры кредитов" title="Очистить фильтры" onClick={() => resetSettingsTableFilters("credits")}>×</button></th>
                             </tr>
                           </thead>
                           <tbody>
-                            {creditPayments.map((p) => (
+                            {visibleCreditPayments.map((p) => (
                               <tr key={p.id} className={p.active ? "" : "inactive"}>
                                 <td><input type="checkbox" checked={p.active} onChange={(e) => updatePayment(p.id, { active: e.target.checked })} /></td>
                                 <td><input value={p.title} onChange={(e) => updatePayment(p.id, { title: e.target.value })} /></td>
@@ -1581,7 +1788,7 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
                                 <td><button type="button" className="iconDelete mini" aria-label={`Удалить ${p.title}`} onClick={() => deletePayment(p.id)}>×</button></td>
                               </tr>
                             ))}
-                            {!creditPayments.length && <tr><td colSpan={9}><div className="settingsEmpty slim">Кредитов пока нет.</div></td></tr>}
+                            {!visibleCreditPayments.length && <tr><td colSpan={9}><div className="settingsEmpty slim">{creditPayments.length ? "По фильтрам ничего не найдено." : "Кредитов пока нет."}</div></td></tr>}
                           </tbody>
                         </table>
                       </div>
@@ -1603,18 +1810,37 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
                       <div className="tableCardHead">
                         <div>
                           <h5>Доходы</h5>
-                          <span>{incomes.length} строк</span>
+                          <span>{visibleIncomes.length} из {incomes.length}</span>
                         </div>
                       </div>
                       <div className="settingsCompactTableWrap">
                         <table className="settingsCompactTable incomeTable">
                           <thead>
-                            <tr>
-                              <th>on</th><th>Название</th><th>Статья</th><th>Сумма</th><th>Частота</th><th>День</th><th>С</th><th>До</th><th></th>
+                            <tr className="settingsSortRow">
+                              <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("incomes", "active")}>on <span>{settingsSortMark("incomes", "active")}</span></button></th>
+                              <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("incomes", "title")}>Название <span>{settingsSortMark("incomes", "title")}</span></button></th>
+                              <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("incomes", "category")}>Статья <span>{settingsSortMark("incomes", "category")}</span></button></th>
+                              <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("incomes", "amount")}>Сумма <span>{settingsSortMark("incomes", "amount")}</span></button></th>
+                              <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("incomes", "frequency")}>Частота <span>{settingsSortMark("incomes", "frequency")}</span></button></th>
+                              <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("incomes", "due_day")}>День <span>{settingsSortMark("incomes", "due_day")}</span></button></th>
+                              <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("incomes", "from")}>С <span>{settingsSortMark("incomes", "from")}</span></button></th>
+                              <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("incomes", "to")}>До <span>{settingsSortMark("incomes", "to")}</span></button></th>
+                              <th></th>
+                            </tr>
+                            <tr className="settingsFilterRow">
+                              <th><select aria-label="Фильтр активности доходов" value={settingsTableFilters.incomes.active} onChange={(e) => setSettingsTableFilter("incomes", "active", e.target.value)}><option value="all">Все</option><option value="active">Вкл</option><option value="inactive">Выкл</option></select></th>
+                              <th><input aria-label="Фильтр доходов по названию" placeholder="Поиск" value={settingsTableFilters.incomes.title} onChange={(e) => setSettingsTableFilter("incomes", "title", e.target.value)} /></th>
+                              <th><select aria-label="Фильтр доходов по статье" value={settingsTableFilters.incomes.category} onChange={(e) => setSettingsTableFilter("incomes", "category", e.target.value)}><option value="">Все статьи</option>{incomeCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></th>
+                              <th><input aria-label="Фильтр доходов по сумме" type="number" placeholder="=" value={settingsTableFilters.incomes.amount} onChange={(e) => setSettingsTableFilter("incomes", "amount", e.target.value)} /></th>
+                              <th><select aria-label="Фильтр доходов по частоте" value={settingsTableFilters.incomes.frequency} onChange={(e) => setSettingsTableFilter("incomes", "frequency", e.target.value)}><option value="">Все</option>{Object.entries(freqLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></th>
+                              <th><input aria-label="Фильтр доходов по дню" type="number" min="1" max="31" placeholder="=" value={settingsTableFilters.incomes.due_day} onChange={(e) => setSettingsTableFilter("incomes", "due_day", e.target.value)} /></th>
+                              <th><MonthPicker value={settingsTableFilters.incomes.from || null} onChange={(value) => setSettingsTableFilter("incomes", "from", value || "")} nullable className="filterMonthPicker" /></th>
+                              <th><MonthPicker value={settingsTableFilters.incomes.to || null} onChange={(value) => setSettingsTableFilter("incomes", "to", value || "")} nullable className="filterMonthPicker" /></th>
+                              <th><button type="button" className="settingsFilterReset" aria-label="Очистить фильтры доходов" title="Очистить фильтры" onClick={() => resetSettingsTableFilters("incomes")}>×</button></th>
                             </tr>
                           </thead>
                           <tbody>
-                            {incomes.map((i) => (
+                            {visibleIncomes.map((i) => (
                               <tr key={i.id} className={i.active ? "" : "inactive"}>
                                 <td><input type="checkbox" checked={i.active} onChange={(e) => updateIncome(i.id, { active: e.target.checked })} /></td>
                                 <td><input value={i.title} onChange={(e) => updateIncome(i.id, { title: e.target.value })} /></td>
@@ -1627,7 +1853,7 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
                                 <td><button type="button" className="iconDelete mini" aria-label={`Удалить ${i.title}`} onClick={() => deleteIncome(i.id)}>×</button></td>
                               </tr>
                             ))}
-                            {!incomes.length && <tr><td colSpan={9}><div className="settingsEmpty slim">Регулярных доходов пока нет.</div></td></tr>}
+                            {!visibleIncomes.length && <tr><td colSpan={9}><div className="settingsEmpty slim">{incomes.length ? "По фильтрам ничего не найдено." : "Регулярных доходов пока нет."}</div></td></tr>}
                           </tbody>
                         </table>
                       </div>
@@ -1647,33 +1873,67 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
                     <div className="categorySettings">
                       <section className="categoryColumn">
                         <div className="categoryColumnHead">
-                          <div><h5>Расходы</h5><span>{expenseCategories.length} статей</span></div>
+                          <div><h5>Расходы</h5><span>{visibleExpenseCategories.length} из {expenseCategories.length}</span></div>
                           <button className="btn" type="button" onClick={() => addCategory("expense")}>+ Добавить</button>
                         </div>
-                        <div className="categoryList">
-                          {expenseCategories.map((c, index) => (
-                            <div className="categoryRow" key={c.id}>
-                              <span className="categoryIndex">{index + 1}</span>
-                              <input value={c.name} onChange={(e) => editCategoryLocal("expense", c.id, e.target.value)} onBlur={(e) => saveCategory("expense", c.id, e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} />
-                              <button type="button" className="iconDelete" aria-label={`Удалить ${c.name}`} onClick={() => deleteCategory("expense", c.id)}>×</button>
-                            </div>
-                          ))}
+                        <div className="settingsCompactTableWrap categoryTableWrap">
+                          <table className="settingsCompactTable categoryTable">
+                            <thead>
+                              <tr className="settingsSortRow">
+                                <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("expenseCategories", "sort_order")}>№ <span>{settingsSortMark("expenseCategories", "sort_order")}</span></button></th>
+                                <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("expenseCategories", "name")}>Название <span>{settingsSortMark("expenseCategories", "name")}</span></button></th>
+                                <th></th>
+                              </tr>
+                              <tr className="settingsFilterRow">
+                                <th></th>
+                                <th><input aria-label="Фильтр расходных статей" placeholder="Поиск по названию" value={settingsTableFilters.expenseCategories.name} onChange={(e) => setSettingsTableFilter("expenseCategories", "name", e.target.value)} /></th>
+                                <th><button type="button" className="settingsFilterReset" aria-label="Очистить фильтр расходных статей" title="Очистить фильтр" onClick={() => resetSettingsTableFilters("expenseCategories")}>×</button></th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {visibleExpenseCategories.map((c) => (
+                                <tr key={c.id}>
+                                  <td className="categoryIndexCell">{expenseCategories.findIndex((item) => item.id === c.id) + 1}</td>
+                                  <td><input value={c.name} onChange={(e) => editCategoryLocal("expense", c.id, e.target.value)} onBlur={(e) => saveCategory("expense", c.id, e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} /></td>
+                                  <td><button type="button" className="iconDelete mini" aria-label={`Удалить ${c.name}`} onClick={() => deleteCategory("expense", c.id)}>×</button></td>
+                                </tr>
+                              ))}
+                              {!visibleExpenseCategories.length && <tr><td colSpan={3}><div className="settingsEmpty slim">{expenseCategories.length ? "По фильтру ничего не найдено." : "Расходных статей пока нет."}</div></td></tr>}
+                            </tbody>
+                          </table>
                         </div>
                       </section>
 
                       <section className="categoryColumn">
                         <div className="categoryColumnHead">
-                          <div><h5>Доходы</h5><span>{incomeCategories.length} статей</span></div>
+                          <div><h5>Доходы</h5><span>{visibleIncomeCategories.length} из {incomeCategories.length}</span></div>
                           <button className="btn" type="button" onClick={() => addCategory("income")}>+ Добавить</button>
                         </div>
-                        <div className="categoryList">
-                          {incomeCategories.map((c, index) => (
-                            <div className="categoryRow" key={c.id}>
-                              <span className="categoryIndex">{index + 1}</span>
-                              <input value={c.name} onChange={(e) => editCategoryLocal("income", c.id, e.target.value)} onBlur={(e) => saveCategory("income", c.id, e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} />
-                              <button type="button" className="iconDelete" aria-label={`Удалить ${c.name}`} onClick={() => deleteCategory("income", c.id)}>×</button>
-                            </div>
-                          ))}
+                        <div className="settingsCompactTableWrap categoryTableWrap">
+                          <table className="settingsCompactTable categoryTable">
+                            <thead>
+                              <tr className="settingsSortRow">
+                                <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("incomeCategories", "sort_order")}>№ <span>{settingsSortMark("incomeCategories", "sort_order")}</span></button></th>
+                                <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("incomeCategories", "name")}>Название <span>{settingsSortMark("incomeCategories", "name")}</span></button></th>
+                                <th></th>
+                              </tr>
+                              <tr className="settingsFilterRow">
+                                <th></th>
+                                <th><input aria-label="Фильтр доходных статей" placeholder="Поиск по названию" value={settingsTableFilters.incomeCategories.name} onChange={(e) => setSettingsTableFilter("incomeCategories", "name", e.target.value)} /></th>
+                                <th><button type="button" className="settingsFilterReset" aria-label="Очистить фильтр доходных статей" title="Очистить фильтр" onClick={() => resetSettingsTableFilters("incomeCategories")}>×</button></th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {visibleIncomeCategories.map((c) => (
+                                <tr key={c.id}>
+                                  <td className="categoryIndexCell">{incomeCategories.findIndex((item) => item.id === c.id) + 1}</td>
+                                  <td><input value={c.name} onChange={(e) => editCategoryLocal("income", c.id, e.target.value)} onBlur={(e) => saveCategory("income", c.id, e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} /></td>
+                                  <td><button type="button" className="iconDelete mini" aria-label={`Удалить ${c.name}`} onClick={() => deleteCategory("income", c.id)}>×</button></td>
+                                </tr>
+                              ))}
+                              {!visibleIncomeCategories.length && <tr><td colSpan={3}><div className="settingsEmpty slim">{incomeCategories.length ? "По фильтру ничего не найдено." : "Доходных статей пока нет."}</div></td></tr>}
+                            </tbody>
+                          </table>
                         </div>
                       </section>
                     </div>

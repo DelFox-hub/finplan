@@ -1350,3 +1350,60 @@ select {
     grid-template-columns: 1fr;
   }
 }
+
+.matrixCurrencyTools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.matrixCurrencyTools > span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.currencyToggle {
+  display: grid;
+  grid-template-columns: repeat(2, 42px);
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.currencyToggle button {
+  height: 30px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.currencyToggle button.active {
+  background: #172033;
+  color: #fff;
+  box-shadow: 0 2px 7px rgba(15, 23, 42, .18);
+}
+
+.sourceTable select:disabled {
+  background: #eef4ff;
+  color: #3154b8;
+  font-weight: 850;
+  opacity: 1;
+}
+
+@media (max-width: 760px) {
+  .forecastHead {
+    flex-direction: column;
+  }
+
+  .matrixCurrencyTools {
+    justify-content: flex-start;
+  }
+}

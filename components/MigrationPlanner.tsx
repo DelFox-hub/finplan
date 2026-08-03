@@ -4,9 +4,18 @@ import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 
 type Currency = "KZT" | "EUR";
-type Country = "KZ" | "DE" | "OTHER";
+type Country = "DE" | "OTHER";
 type RowKind = "income" | "expense";
 type Frequency = "monthly" | "quarterly" | "yearly" | "once";
+
+type DiaryMonthPlan = {
+  month: string;
+  incomeBy: Record<string, number>;
+  expenseBy: Record<string, number>;
+  incomeTotal: number;
+  expenseTotal: number;
+  net: number;
+};
 
 type PlanRow = {
   id: string;
@@ -27,9 +36,7 @@ type PlanRow = {
 type MigrationPlan = {
   startMonth: string;
   months: number;
-  baseCurrency: Currency;
   eurKzt: number;
-  startBalanceKzt: number;
   startBalanceEur: number;
   grossPartTime: number;
   grossMain: number;
@@ -45,17 +52,22 @@ type MonthPlan = {
   expenseKzt: number;
   netKzt: number;
   cumulativeKzt: number;
-  incomeEur: number;
-  expenseEur: number;
-  netEur: number;
   cumulativeEur: number;
-  byCountry: Record<Country, { incomeKzt: number; expenseKzt: number }>;
+  byCountry: Record<"KZ" | Country, { incomeKzt: number; expenseKzt: number }>;
+  kzIncomeBy: Record<string, number>;
+  kzExpenseBy: Record<string, number>;
+};
+
+type MigrationPlannerProps = {
+  userId: string;
+  diaryStartMonth: string;
+  getDiaryMonthPlan: (month: string) => DiaryMonthPlan;
+  getDiaryBalanceBeforeMonth: (month: string) => number;
 };
 
 const supabase = createClient();
 
 const countries: Record<Country, string> = {
-  KZ: "Казахстан",
   DE: "Германия",
   OTHER: "Другое"
 };
@@ -97,19 +109,20 @@ function fmt(n: number, currency: Currency = "KZT") {
   return `${v.toLocaleString("ru-RU")}${suffix}`;
 }
 
+function compact(n: number) {
+  return Math.round(Number(n || 0)).toLocaleString("ru-RU");
+}
+
 function uuid() {
   if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-function defaultPlan(): MigrationPlan {
-  const start = currentMonth();
+function defaultPlan(startMonth = currentMonth()): MigrationPlan {
   return {
-    startMonth: start,
+    startMonth,
     months: 36,
-    baseCurrency: "KZT",
     eurKzt: 650,
-    startBalanceKzt: 0,
     startBalanceEur: 0,
     grossPartTime: 1300,
     grossMain: 4500,
@@ -120,26 +133,13 @@ function defaultPlan(): MigrationPlan {
       {
         id: uuid(),
         kind: "income",
-        title: "Зарплата / Казахстан",
-        country: "KZ",
-        currency: "KZT",
-        amount: 720000,
-        frequency: "monthly",
-        startMonth: start,
-        endMonth: "",
-        active: true,
-        group: "доход"
-      },
-      {
-        id: uuid(),
-        kind: "income",
         title: "Подработка / Германия",
         country: "DE",
         currency: "EUR",
         amount: 0,
         autoSource: "partTimeNet",
         frequency: "monthly",
-        startMonth: addMonths(start, 8),
+        startMonth: addMonths(startMonth, 8),
         endMonth: "",
         active: true,
         group: "доход"
@@ -153,49 +153,10 @@ function defaultPlan(): MigrationPlan {
         amount: 0,
         autoSource: "mainNet",
         frequency: "monthly",
-        startMonth: addMonths(start, 12),
+        startMonth: addMonths(startMonth, 12),
         endMonth: "",
         active: true,
         group: "доход"
-      },
-      {
-        id: uuid(),
-        kind: "expense",
-        title: "Кредиты Казахстан",
-        country: "KZ",
-        currency: "KZT",
-        amount: 404247,
-        frequency: "monthly",
-        startMonth: start,
-        endMonth: "",
-        active: true,
-        group: "кредиты"
-      },
-      {
-        id: uuid(),
-        kind: "expense",
-        title: "Аренда / жильё",
-        country: "KZ",
-        currency: "KZT",
-        amount: 260000,
-        frequency: "monthly",
-        startMonth: start,
-        endMonth: addMonths(start, 10),
-        active: true,
-        group: "жильё"
-      },
-      {
-        id: uuid(),
-        kind: "expense",
-        title: "Питание Казахстан",
-        country: "KZ",
-        currency: "KZT",
-        amount: 70000,
-        frequency: "monthly",
-        startMonth: start,
-        endMonth: "",
-        active: true,
-        group: "питание"
       },
       {
         id: uuid(),
@@ -205,7 +166,7 @@ function defaultPlan(): MigrationPlan {
         currency: "EUR",
         amount: 250,
         frequency: "monthly",
-        startMonth: addMonths(start, 10),
+        startMonth: addMonths(startMonth, 10),
         endMonth: "",
         active: true,
         group: "питание"
@@ -218,23 +179,10 @@ function defaultPlan(): MigrationPlan {
         currency: "EUR",
         amount: 80,
         frequency: "monthly",
-        startMonth: addMonths(start, 10),
+        startMonth: addMonths(startMonth, 10),
         endMonth: "",
         active: true,
         group: "транспорт"
-      },
-      {
-        id: uuid(),
-        kind: "expense",
-        title: "Кошки",
-        country: "KZ",
-        currency: "KZT",
-        amount: 60000,
-        frequency: "monthly",
-        startMonth: start,
-        endMonth: "",
-        active: true,
-        group: "кошки"
       },
       {
         id: uuid(),
@@ -244,7 +192,7 @@ function defaultPlan(): MigrationPlan {
         currency: "KZT",
         amount: 400000,
         frequency: "once",
-        startMonth: addMonths(start, 10),
+        startMonth: addMonths(startMonth, 10),
         endMonth: "",
         active: true,
         group: "переезд"
@@ -271,10 +219,6 @@ function toKzt(amount: number, currency: Currency, eurKzt: number) {
   return currency === "EUR" ? amount * eurKzt : amount;
 }
 
-function toEur(amount: number, currency: Currency, eurKzt: number) {
-  return currency === "EUR" ? amount : amount / eurKzt;
-}
-
 function calcGermanNet(gross: number, options: { kkAdditional: number; hasChildren: boolean; churchTax: boolean }) {
   const bbgRv = 8450;
   const bbgKv = 5812.5;
@@ -294,14 +238,7 @@ function calcGermanNet(gross: number, options: { kkAdditional: number; hasChildr
   return {
     gross,
     net: Math.max(0, gross - deductions),
-    deductions,
-    rv,
-    alv,
-    kv,
-    pv,
-    lohnsteuer,
-    soli,
-    church
+    deductions
   };
 }
 
@@ -319,37 +256,47 @@ function roughGermanIncomeTax2026(x: number) {
   return 0.45 * x - 19246.67;
 }
 
-
-function normalizePlan(input: Partial<MigrationPlan> | null | undefined): MigrationPlan {
-  const base = defaultPlan();
+function normalizePlan(input: Partial<MigrationPlan> | null | undefined, diaryStartMonth: string): MigrationPlan {
+  const base = defaultPlan(currentMonth());
   const raw = input || {};
   const rows = Array.isArray(raw.rows) ? raw.rows : base.rows;
+  const requestedStart = raw.startMonth || base.startMonth;
+  const safeStart = monthIndex(requestedStart) < monthIndex(diaryStartMonth) ? diaryStartMonth : requestedStart;
+
   return {
     ...base,
     ...raw,
-    startMonth: raw.startMonth || base.startMonth,
+    startMonth: safeStart,
     months: Math.min(Math.max(Number(raw.months || base.months), 1), 120),
-    eurKzt: Number(raw.eurKzt || base.eurKzt || 1),
-    rows: rows.map((row: any) => ({
-      id: row.id || uuid(),
-      kind: row.kind === "income" ? "income" : "expense",
-      title: row.title || "Строка",
-      country: ["KZ", "DE", "OTHER"].includes(row.country) ? row.country : "OTHER",
-      currency: row.currency === "EUR" ? "EUR" : "KZT",
-      amount: Number(row.amount || 0),
-      autoSource: row.autoSource === "partTimeNet" || row.autoSource === "mainNet" ? row.autoSource : "",
-      frequency: ["monthly", "quarterly", "yearly", "once"].includes(row.frequency) ? row.frequency : "monthly",
-      startMonth: row.startMonth || raw.startMonth || base.startMonth,
-      endMonth: row.endMonth || "",
-      active: row.active !== false,
-      group: row.group || (row.kind === "income" ? "доход" : "расход"),
-      comment: row.comment || ""
-    }))
+    eurKzt: Math.max(Number(raw.eurKzt || base.eurKzt || 1), 1),
+    startBalanceEur: Number(raw.startBalanceEur || 0),
+    rows: rows
+      .filter((row: any) => row.country !== "KZ")
+      .map((row: any) => ({
+        id: row.id || uuid(),
+        kind: row.kind === "income" ? "income" : "expense",
+        title: row.title || "Строка",
+        country: row.country === "OTHER" ? "OTHER" : "DE",
+        currency: row.currency === "EUR" ? "EUR" : "KZT",
+        amount: Number(row.amount || 0),
+        autoSource: row.autoSource === "partTimeNet" || row.autoSource === "mainNet" ? row.autoSource : "",
+        frequency: ["monthly", "quarterly", "yearly", "once"].includes(row.frequency) ? row.frequency : "monthly",
+        startMonth: row.startMonth || safeStart,
+        endMonth: row.endMonth || "",
+        active: row.active !== false,
+        group: row.group || (row.kind === "income" ? "доход" : "расход"),
+        comment: row.comment || ""
+      }))
   };
 }
 
-export default function MigrationPlanner({ userId }: { userId: string }) {
-  const [plan, setPlan] = useState<MigrationPlan>(defaultPlan());
+export default function MigrationPlanner({
+  userId,
+  diaryStartMonth,
+  getDiaryMonthPlan,
+  getDiaryBalanceBeforeMonth
+}: MigrationPlannerProps) {
+  const [plan, setPlan] = useState<MigrationPlan>(() => defaultPlan(currentMonth()));
   const [loading, setLoading] = useState(true);
   const [dirty, setDirty] = useState(false);
   const [message, setMessage] = useState("");
@@ -357,7 +304,7 @@ export default function MigrationPlanner({ userId }: { userId: string }) {
   useEffect(() => {
     loadPlan();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [userId]);
 
   async function loadPlan() {
     setLoading(true);
@@ -370,9 +317,9 @@ export default function MigrationPlanner({ userId }: { userId: string }) {
     }
 
     if (data?.data) {
-      setPlan(normalizePlan(data.data));
+      setPlan(normalizePlan(data.data, diaryStartMonth));
     } else {
-      const seed = defaultPlan();
+      const seed = defaultPlan(monthIndex(currentMonth()) < monthIndex(diaryStartMonth) ? diaryStartMonth : currentMonth());
       await supabase.from("relocation_plans").upsert({ user_id: userId, data: seed });
       setPlan(seed);
     }
@@ -402,6 +349,11 @@ export default function MigrationPlanner({ userId }: { userId: string }) {
     setDirty(true);
   }
 
+  function updateStartMonth(value: string) {
+    const next = !value || monthIndex(value) < monthIndex(diaryStartMonth) ? diaryStartMonth : value;
+    updatePlan({ startMonth: next });
+  }
+
   function updateRow(id: string, patch: Partial<PlanRow>) {
     setPlan((prev) => ({
       ...prev,
@@ -416,7 +368,7 @@ export default function MigrationPlanner({ userId }: { userId: string }) {
       kind,
       title: kind === "income" ? "Новый доход" : "Новый расход",
       country: "DE",
-      currency: kind === "income" ? "EUR" : "KZT",
+      currency: kind === "income" ? "EUR" : "EUR",
       amount: 0,
       autoSource: "",
       frequency: "monthly",
@@ -439,17 +391,18 @@ export default function MigrationPlanner({ userId }: { userId: string }) {
 
   const data = useMemo(() => {
     const months = Array.from({ length: Number(plan.months || 1) }, (_, i) => addMonths(plan.startMonth, i));
-    let cumulativeKzt = Number(plan.startBalanceKzt || 0) + Number(plan.startBalanceEur || 0) * Number(plan.eurKzt || 1);
+    let cumulativeKzt = getDiaryBalanceBeforeMonth(plan.startMonth) + Number(plan.startBalanceEur || 0) * Number(plan.eurKzt || 1);
 
     return months.map((month): MonthPlan => {
+      const diary = getDiaryMonthPlan(month);
       const byCountry: MonthPlan["byCountry"] = {
-        KZ: { incomeKzt: 0, expenseKzt: 0 },
+        KZ: { incomeKzt: Number(diary.incomeTotal || 0), expenseKzt: Number(diary.expenseTotal || 0) },
         DE: { incomeKzt: 0, expenseKzt: 0 },
         OTHER: { incomeKzt: 0, expenseKzt: 0 }
       };
 
-      let incomeKzt = 0;
-      let expenseKzt = 0;
+      let incomeKzt = Number(diary.incomeTotal || 0);
+      let expenseKzt = Number(diary.expenseTotal || 0);
 
       const partTimeNetLocal = calcGermanNet(Number(plan.grossPartTime || 0), plan).net;
       const mainNetLocal = calcGermanNet(Number(plan.grossMain || 0), plan).net;
@@ -476,36 +429,48 @@ export default function MigrationPlanner({ userId }: { userId: string }) {
         expenseKzt,
         netKzt,
         cumulativeKzt,
-        incomeEur: incomeKzt / Number(plan.eurKzt || 1),
-        expenseEur: expenseKzt / Number(plan.eurKzt || 1),
-        netEur: netKzt / Number(plan.eurKzt || 1),
         cumulativeEur: cumulativeKzt / Number(plan.eurKzt || 1),
-        byCountry
+        byCountry,
+        kzIncomeBy: diary.incomeBy || {},
+        kzExpenseBy: diary.expenseBy || {}
       };
     });
-  }, [plan]);
+  }, [plan, getDiaryBalanceBeforeMonth, getDiaryMonthPlan]);
 
   const summary = useMemo(() => {
     const min = Math.min(...data.map((m) => m.cumulativeKzt), 0);
     const firstNegative = data.find((m) => m.cumulativeKzt < 0)?.month || "";
-    const firstPositiveAfterNegative = firstNegative ? data.find((m) => monthIndex(m.month) >= monthIndex(firstNegative) && m.cumulativeKzt >= 0)?.month || "" : "";
     const totalIncome = data.reduce((s, m) => s + m.incomeKzt, 0);
     const totalExpense = data.reduce((s, m) => s + m.expenseKzt, 0);
     const last = data.at(-1);
-    const safeMonths = data.findIndex((m) => m.cumulativeKzt < 0);
+    const safeIndex = data.findIndex((m) => m.cumulativeKzt < 0);
     return {
       min,
       firstNegative,
-      firstPositiveAfterNegative,
       totalIncome,
       totalExpense,
       endKzt: last?.cumulativeKzt || 0,
-      safeMonths: safeMonths === -1 ? data.length : safeMonths
+      safeMonths: safeIndex === -1 ? data.length : safeIndex
     };
   }, [data]);
 
   const partTimeNet = calcGermanNet(Number(plan.grossPartTime || 0), plan);
   const mainNet = calcGermanNet(Number(plan.grossMain || 0), plan);
+  const startDiary = getDiaryMonthPlan(plan.startMonth);
+  const startBalance = getDiaryBalanceBeforeMonth(plan.startMonth);
+  const startEndBalance = startBalance + startDiary.net;
+
+  const kzIncomeNames = useMemo(() => {
+    const names = new Set<string>();
+    data.forEach((month) => Object.entries(month.kzIncomeBy).forEach(([name, value]) => Number(value) !== 0 && names.add(name)));
+    return [...names];
+  }, [data]);
+
+  const kzExpenseNames = useMemo(() => {
+    const names = new Set<string>();
+    data.forEach((month) => Object.entries(month.kzExpenseBy).forEach(([name, value]) => Number(value) !== 0 && names.add(name)));
+    return [...names];
+  }, [data]);
 
   if (loading) return <section className="relocationPanel">Загрузка калькулятора…</section>;
 
@@ -513,31 +478,82 @@ export default function MigrationPlanner({ userId }: { userId: string }) {
     <section className="relocationPanel">
       <div className="relocationHead">
         <div>
-          <h2>План переезда / мультивалютный калькулятор</h2>
-          <p>Отдельный сценарный расчёт: Казахстан + Германия, KZT + EUR, доходы, расходы, разовые траты, накопительный остаток.</p>
+          <div className="relocationTitleLine">
+            <h2>План переезда</h2>
+            <span className="syncBadge">Казахстан синхронизирован</span>
+          </div>
+          <p>Доходы, расходы, кредиты, квартира и остальные статьи Казахстана берутся напрямую из дневника. Здесь редактируются только Германия и прочие сценарные суммы.</p>
         </div>
         <div className="relocationActions">
-          <button type="button" className="btn" onClick={() => savePlan()}>{dirty ? "Сохранить *" : "Сохранено"}</button>
-          <button type="button" className="btn" onClick={() => navigator.clipboard?.writeText(JSON.stringify(plan, null, 2))}>копировать JSON</button>
+          <button type="button" className={`btn ${dirty ? "blue" : ""}`} onClick={() => savePlan()}>{dirty ? "Сохранить изменения" : "Сохранено"}</button>
         </div>
       </div>
 
       {message && <div className="plannerMessage">{message}</div>}
 
-      <div className="plannerGrid">
-        <div className="plannerCard">
-          <h3>Параметры</h3>
-          <div className="plannerInputs">
-            <label>Начало плана<input type="month" value={plan.startMonth} onChange={(e) => updatePlan({ startMonth: e.target.value || currentMonth() })} /></label>
-            <label>Месяцев<input type="number" min="1" max="120" value={plan.months} onChange={(e) => updatePlan({ months: Number(e.target.value || 1) })} /></label>
-            <label>EUR → KZT<input type="number" value={plan.eurKzt} onChange={(e) => updatePlan({ eurKzt: Number(e.target.value || 1) })} /></label>
-            <label>Старт KZT<input type="number" value={plan.startBalanceKzt} onChange={(e) => updatePlan({ startBalanceKzt: Number(e.target.value || 0) })} /></label>
-            <label>Старт EUR<input type="number" value={plan.startBalanceEur} onChange={(e) => updatePlan({ startBalanceEur: Number(e.target.value || 0) })} /></label>
+      <div className="scenarioBar">
+        <label>Начало сценария<input type="month" min={diaryStartMonth} value={plan.startMonth} onChange={(e) => updateStartMonth(e.target.value)} /></label>
+        <label>Горизонт, месяцев<input type="number" min="1" max="120" value={plan.months} onChange={(e) => updatePlan({ months: Number(e.target.value || 1) })} /></label>
+        <label>Курс EUR → KZT<input type="number" min="1" value={plan.eurKzt} onChange={(e) => updatePlan({ eurKzt: Number(e.target.value || 1) })} /></label>
+        <label>Резерв в EUR<input type="number" value={plan.startBalanceEur} onChange={(e) => updatePlan({ startBalanceEur: Number(e.target.value || 0) })} /></label>
+        <div className="autoBalanceBox">
+          <span>Стартовый остаток KZT</span>
+          <b>{fmt(startBalance)}</b>
+          <small>автоматически из дневника</small>
+        </div>
+      </div>
+
+      <div className="plannerKpis">
+        <div><span>Без ухода в минус</span><b>{summary.safeMonths} мес.</b></div>
+        <div><span>Первый минус</span><b className={summary.firstNegative ? "bad" : "ok"}>{summary.firstNegative ? monthLabel(summary.firstNegative) : "нет"}</b></div>
+        <div><span>Минимальный остаток</span><b className={summary.min < 0 ? "bad" : "ok"}>{fmt(summary.min)}</b></div>
+        <div><span>На конец горизонта</span><b className={summary.endKzt < 0 ? "bad" : "ok"}>{fmt(summary.endKzt)}</b></div>
+        <div><span>Доходы всего</span><b>{fmt(summary.totalIncome)}</b></div>
+        <div><span>Расходы всего</span><b>{fmt(summary.totalExpense)}</b></div>
+      </div>
+
+      <div className="plannerMainGrid">
+        <div className="plannerCard kzSyncCard">
+          <div className="cardTitleRow">
+            <div>
+              <h3>Казахстан · {monthLabel(plan.startMonth)}</h3>
+              <p>Точное отражение календарного прогноза дневника.</p>
+            </div>
+            <span className="readOnlyBadge">только чтение</span>
+          </div>
+
+          <div className="kzMonthTotals">
+            <div className="income"><span>Доходы</span><b>{fmt(startDiary.incomeTotal)}</b></div>
+            <div className="expense"><span>Расходы</span><b>{fmt(startDiary.expenseTotal)}</b></div>
+            <div><span>Остаток месяца</span><b className={startDiary.net < 0 ? "bad" : "ok"}>{fmt(startDiary.net)}</b></div>
+            <div><span>На конец месяца</span><b className={startEndBalance < 0 ? "bad" : "ok"}>{fmt(startEndBalance)}</b></div>
+          </div>
+
+          <div className="kzBreakdown">
+            <div>
+              <h4>Доходы</h4>
+              {Object.entries(startDiary.incomeBy).filter(([, value]) => Number(value) !== 0).map(([name, value]) => (
+                <div className="breakdownLine" key={`kzi-${name}`}><span>{name}</span><b>{fmt(value)}</b></div>
+              ))}
+              {Object.values(startDiary.incomeBy).every((value) => Number(value) === 0) && <div className="emptyMini">Нет доходов</div>}
+            </div>
+            <div>
+              <h4>Расходы</h4>
+              {Object.entries(startDiary.expenseBy).filter(([, value]) => Number(value) !== 0).map(([name, value]) => (
+                <div className="breakdownLine" key={`kze-${name}`}><span>{name}</span><b>{fmt(value)}</b></div>
+              ))}
+              {Object.values(startDiary.expenseBy).every((value) => Number(value) === 0) && <div className="emptyMini">Нет расходов</div>}
+            </div>
           </div>
         </div>
 
         <div className="plannerCard salaryCard">
-          <h3>Германия: брутто → плановое нетто</h3>
+          <div className="cardTitleRow">
+            <div>
+              <h3>Германия · расчёт дохода</h3>
+              <p>Нетто автоматически подставляется в строки сценария.</p>
+            </div>
+          </div>
           <div className="salaryGrid">
             <label>Подработка gross, €<input type="number" value={plan.grossPartTime} onChange={(e) => updatePlan({ grossPartTime: Number(e.target.value || 0) })} /></label>
             <label>Основная gross, €<input type="number" value={plan.grossMain} onChange={(e) => updatePlan({ grossMain: Number(e.target.value || 0) })} /></label>
@@ -550,25 +566,16 @@ export default function MigrationPlanner({ userId }: { userId: string }) {
             <div><span>Основная netto</span><b>{fmt(mainNet.net, "EUR")}</b></div>
             <div><span>Удержания основной</span><b>{fmt(mainNet.deductions, "EUR")}</b></div>
           </div>
-          <p className="smallWarn">Это плановый расчёт по логике твоей таблицы, не официальный payroll. Для точности можно вручную указать нетто отдельной строкой дохода.</p>
-        </div>
-
-        <div className="plannerCard summaryWide">
-          <h3>Итог сценария</h3>
-          <div className="plannerSummary">
-            <div><span>Хватит без минуса</span><b>{summary.safeMonths} мес.</b></div>
-            <div><span>Минимальный остаток</span><b className={summary.min < 0 ? "bad" : "ok"}>{fmt(summary.min)}</b></div>
-            <div><span>Конец горизонта</span><b className={summary.endKzt < 0 ? "bad" : "ok"}>{fmt(summary.endKzt)}</b></div>
-            <div><span>Доходы всего</span><b>{fmt(summary.totalIncome)}</b></div>
-            <div><span>Расходы всего</span><b>{fmt(summary.totalExpense)}</b></div>
-            <div><span>Первый минус</span><b>{summary.firstNegative ? monthLabel(summary.firstNegative) : "нет"}</b></div>
-          </div>
+          <p className="smallWarn">Расчёт ориентировочный. Для точного сценария можно выбрать «ручная сумма» в нужной строке дохода.</p>
         </div>
       </div>
 
       <div className="plannerSources">
         <div className="sourcesHead">
-          <h3>Источники доходов и расходов</h3>
+          <div>
+            <h3>Германия и прочие сценарные статьи</h3>
+            <p>Казахстан здесь не редактируется: любые изменения вносятся в дневник и сразу попадают в расчёт.</p>
+          </div>
           <div>
             <button type="button" className="btn blue" onClick={() => addRow("income")}>+ доход</button>
             <button type="button" className="btn" onClick={() => addRow("expense")}>+ расход</button>
@@ -583,12 +590,10 @@ export default function MigrationPlanner({ userId }: { userId: string }) {
                 <th>Тип</th>
                 <th>Название</th>
                 <th>Страна</th>
-                <th>Валюта</th>
                 <th>Сумма</th>
-                <th>Источник</th>
+                <th>Расчёт</th>
                 <th>Частота</th>
-                <th>С</th>
-                <th>До</th>
+                <th>Период</th>
                 <th>Группа</th>
                 <th></th>
               </tr>
@@ -603,22 +608,24 @@ export default function MigrationPlanner({ userId }: { userId: string }) {
                       <option value="expense">расход</option>
                     </select>
                   </td>
-                  <td><input value={row.title} onChange={(e) => updateRow(row.id, { title: e.target.value })} /></td>
+                  <td><input className="titleInput" value={row.title} onChange={(e) => updateRow(row.id, { title: e.target.value })} /></td>
                   <td>
                     <select value={row.country} onChange={(e) => updateRow(row.id, { country: e.target.value as Country })}>
-                      {Object.entries(countries).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                      {Object.entries(countries).map(([key, value]) => <option key={key} value={key}>{value}</option>)}
                     </select>
                   </td>
                   <td>
-                    <select value={row.currency} onChange={(e) => updateRow(row.id, { currency: e.target.value as Currency })}>
-                      <option value="KZT">KZT</option>
-                      <option value="EUR">EUR</option>
-                    </select>
+                    <div className="amountEditor">
+                      <input type="number" value={row.amount} disabled={!!row.autoSource} onChange={(e) => updateRow(row.id, { amount: Number(e.target.value || 0) })} />
+                      <select value={row.currency} onChange={(e) => updateRow(row.id, { currency: e.target.value as Currency })}>
+                        <option value="KZT">₸</option>
+                        <option value="EUR">€</option>
+                      </select>
+                    </div>
                   </td>
-                  <td><input type="number" value={row.amount} disabled={!!row.autoSource} onChange={(e) => updateRow(row.id, { amount: Number(e.target.value || 0) })} /></td>
                   <td>
                     <select value={row.autoSource || ""} onChange={(e) => updateRow(row.id, { autoSource: e.target.value as PlanRow["autoSource"] })}>
-                      <option value="">ручн.</option>
+                      <option value="">ручная сумма</option>
                       <option value="partTimeNet">нетто подработка</option>
                       <option value="mainNet">нетто основная</option>
                     </select>
@@ -631,12 +638,17 @@ export default function MigrationPlanner({ userId }: { userId: string }) {
                       <option value="once">разово</option>
                     </select>
                   </td>
-                  <td><input type="month" value={row.startMonth} onChange={(e) => updateRow(row.id, { startMonth: e.target.value })} /></td>
-                  <td><input type="month" value={row.endMonth} onChange={(e) => updateRow(row.id, { endMonth: e.target.value })} /></td>
+                  <td>
+                    <div className="periodEditor">
+                      <input type="month" value={row.startMonth} onChange={(e) => updateRow(row.id, { startMonth: e.target.value })} />
+                      <span>—</span>
+                      <input type="month" value={row.endMonth} onChange={(e) => updateRow(row.id, { endMonth: e.target.value })} />
+                    </div>
+                  </td>
                   <td><input value={row.group} onChange={(e) => updateRow(row.id, { group: e.target.value })} /></td>
                   <td className="rowTools">
-                    <button type="button" onClick={() => duplicateRow(row)}>⧉</button>
-                    <button type="button" onClick={() => deleteRow(row.id)}>×</button>
+                    <button type="button" title="Дублировать" onClick={() => duplicateRow(row)}>⧉</button>
+                    <button type="button" title="Удалить" onClick={() => deleteRow(row.id)}>×</button>
                   </td>
                 </tr>
               ))}
@@ -645,26 +657,53 @@ export default function MigrationPlanner({ userId }: { userId: string }) {
         </div>
       </div>
 
-      <div className="plannerMatrixWrap">
-        <table className="plannerMatrix">
-          <thead>
-            <tr>
-              <th className="stickyCol">Показатель</th>
-              {data.map((m) => <th key={m.month}>{monthLabel(m.month)}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            <tr className="strong"><th className="stickyCol">Доходы KZT</th>{data.map((m) => <td key={`i-${m.month}`}>{Math.round(m.incomeKzt).toLocaleString("ru-RU")}</td>)}</tr>
-            <tr className="strong"><th className="stickyCol">Расходы KZT</th>{data.map((m) => <td key={`e-${m.month}`}>{Math.round(m.expenseKzt).toLocaleString("ru-RU")}</td>)}</tr>
-            <tr className="strong"><th className="stickyCol">Остаток месяца</th>{data.map((m) => <td className={m.netKzt < 0 ? "badCell" : ""} key={`n-${m.month}`}>{Math.round(m.netKzt).toLocaleString("ru-RU")}</td>)}</tr>
-            <tr className="strong"><th className="stickyCol">Накопительно KZT</th>{data.map((m) => <td className={m.cumulativeKzt < 0 ? "badCell" : ""} key={`c-${m.month}`}>{Math.round(m.cumulativeKzt).toLocaleString("ru-RU")}</td>)}</tr>
-            <tr><th className="stickyCol">Накопительно EUR</th>{data.map((m) => <td className={m.cumulativeEur < 0 ? "badCell" : ""} key={`ce-${m.month}`}>{Math.round(m.cumulativeEur).toLocaleString("ru-RU")}</td>)}</tr>
-            <tr className="section"><th className="stickyCol">Казахстан: доход</th>{data.map((m) => <td key={`kzi-${m.month}`}>{Math.round(m.byCountry.KZ.incomeKzt).toLocaleString("ru-RU")}</td>)}</tr>
-            <tr><th className="stickyCol">Казахстан: расход</th>{data.map((m) => <td key={`kze-${m.month}`}>{Math.round(m.byCountry.KZ.expenseKzt).toLocaleString("ru-RU")}</td>)}</tr>
-            <tr className="section"><th className="stickyCol">Германия: доход</th>{data.map((m) => <td key={`dei-${m.month}`}>{Math.round(m.byCountry.DE.incomeKzt).toLocaleString("ru-RU")}</td>)}</tr>
-            <tr><th className="stickyCol">Германия: расход</th>{data.map((m) => <td key={`dee-${m.month}`}>{Math.round(m.byCountry.DE.expenseKzt).toLocaleString("ru-RU")}</td>)}</tr>
-          </tbody>
-        </table>
+      <div className="forecastBlock">
+        <div className="forecastHead">
+          <div>
+            <h3>Помесячный сценарий</h3>
+            <p>Синие строки — общий итог. Казахстан и его детализация синхронизированы с дневником.</p>
+          </div>
+        </div>
+        <div className="plannerMatrixWrap">
+          <table className="plannerMatrix">
+            <thead>
+              <tr>
+                <th className="stickyCol">Показатель</th>
+                {data.map((month) => <th key={month.month}>{monthLabel(month.month)}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="strong"><th className="stickyCol">Доходы всего</th>{data.map((month) => <td key={`i-${month.month}`}>{compact(month.incomeKzt)}</td>)}</tr>
+              <tr className="strong"><th className="stickyCol">Расходы всего</th>{data.map((month) => <td key={`e-${month.month}`}>{compact(month.expenseKzt)}</td>)}</tr>
+              <tr className="strong"><th className="stickyCol">Остаток месяца</th>{data.map((month) => <td className={month.netKzt < 0 ? "badCell" : ""} key={`n-${month.month}`}>{compact(month.netKzt)}</td>)}</tr>
+              <tr className="strong"><th className="stickyCol">Накопительно KZT</th>{data.map((month) => <td className={month.cumulativeKzt < 0 ? "badCell" : ""} key={`c-${month.month}`}>{compact(month.cumulativeKzt)}</td>)}</tr>
+              <tr><th className="stickyCol">Накопительно EUR</th>{data.map((month) => <td className={month.cumulativeEur < 0 ? "badCell" : ""} key={`ce-${month.month}`}>{compact(month.cumulativeEur)}</td>)}</tr>
+
+              <tr className="countrySection synced"><th className="stickyCol">Казахстан · дневник</th>{data.map((month) => <td key={`kz-title-${month.month}`}>синхр.</td>)}</tr>
+              <tr className="section"><th className="stickyCol">Доходы Казахстан</th>{data.map((month) => <td key={`kzi-${month.month}`}>{compact(month.byCountry.KZ.incomeKzt)}</td>)}</tr>
+              {kzIncomeNames.map((name) => (
+                <tr className="detailRow" key={`kzi-name-${name}`}>
+                  <th className="stickyCol">{name}</th>
+                  {data.map((month) => <td key={`kzi-${name}-${month.month}`}>{compact(month.kzIncomeBy[name] || 0)}</td>)}
+                </tr>
+              ))}
+              <tr className="section"><th className="stickyCol">Расходы Казахстан</th>{data.map((month) => <td key={`kze-${month.month}`}>{compact(month.byCountry.KZ.expenseKzt)}</td>)}</tr>
+              {kzExpenseNames.map((name) => (
+                <tr className="detailRow" key={`kze-name-${name}`}>
+                  <th className="stickyCol">{name}</th>
+                  {data.map((month) => <td key={`kze-${name}-${month.month}`}>{compact(month.kzExpenseBy[name] || 0)}</td>)}
+                </tr>
+              ))}
+
+              <tr className="countrySection"><th className="stickyCol">Германия</th>{data.map((month) => <td key={`de-title-${month.month}`}></td>)}</tr>
+              <tr><th className="stickyCol">Доходы Германия</th>{data.map((month) => <td key={`dei-${month.month}`}>{compact(month.byCountry.DE.incomeKzt)}</td>)}</tr>
+              <tr><th className="stickyCol">Расходы Германия</th>{data.map((month) => <td key={`dee-${month.month}`}>{compact(month.byCountry.DE.expenseKzt)}</td>)}</tr>
+              <tr className="countrySection"><th className="stickyCol">Другое</th>{data.map((month) => <td key={`other-title-${month.month}`}></td>)}</tr>
+              <tr><th className="stickyCol">Доходы другое</th>{data.map((month) => <td key={`oi-${month.month}`}>{compact(month.byCountry.OTHER.incomeKzt)}</td>)}</tr>
+              <tr><th className="stickyCol">Расходы другое</th>{data.map((month) => <td key={`oe-${month.month}`}>{compact(month.byCountry.OTHER.expenseKzt)}</td>)}</tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
   );

@@ -848,17 +848,20 @@ select {
 
 /* Relocation planner */
 .relocationPanel {
-  background: rgba(255, 255, 255, .9);
+  background: rgba(255, 255, 255, .92);
   border: 1px solid var(--line);
   border-radius: 22px;
   box-shadow: var(--shadow);
-  padding: 14px;
+  padding: 16px;
   display: grid;
   gap: 14px;
   min-width: 0;
 }
 
-.relocationHead {
+.relocationHead,
+.sourcesHead,
+.cardTitleRow,
+.forecastHead {
   display: flex;
   justify-content: space-between;
   gap: 14px;
@@ -867,19 +870,56 @@ select {
 
 .relocationHead h2,
 .plannerCard h3,
-.plannerSources h3 {
+.plannerSources h3,
+.forecastBlock h3,
+.kzBreakdown h4 {
   margin: 0;
 }
 
-.relocationHead p {
+.relocationHead p,
+.sourcesHead p,
+.cardTitleRow p,
+.forecastHead p {
   margin: 5px 0 0;
   color: var(--muted);
   font-weight: 700;
   line-height: 1.4;
+  font-size: 12px;
+}
+
+.relocationTitleLine {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.syncBadge,
+.readOnlyBadge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.syncBadge {
+  background: var(--green-soft);
+  color: var(--green);
+  border: 1px solid #b8ead0;
+}
+
+.readOnlyBadge {
+  background: #eef4ff;
+  color: #3154b8;
+  border: 1px solid #c9d7fb;
 }
 
 .relocationActions,
-.sourcesHead > div {
+.sourcesHead > div:last-child {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
@@ -895,31 +935,167 @@ select {
   font-weight: 800;
 }
 
-.plannerGrid {
+.scenarioBar {
   display: grid;
-  grid-template-columns: minmax(260px, .9fr) minmax(360px, 1.1fr) minmax(360px, 1.3fr);
+  grid-template-columns: repeat(4, minmax(140px, 1fr)) minmax(200px, 1.3fr);
   gap: 10px;
-}
-
-.plannerCard {
+  padding: 12px;
   border: 1px solid var(--line);
   border-radius: 18px;
-  background: #fff;
-  padding: 12px;
-  display: grid;
-  gap: 10px;
+  background: #f8fafc;
 }
 
-.plannerInputs,
-.salaryGrid,
-.plannerSummary {
+.autoBalanceBox {
+  min-height: 58px;
+  padding: 9px 11px;
+  border-radius: 13px;
+  border: 1px solid #b8ead0;
+  background: var(--green-soft);
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: center;
+  gap: 1px;
+}
+
+.autoBalanceBox span,
+.autoBalanceBox small {
+  color: #28725b;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.autoBalanceBox b {
+  font-size: 18px;
+  color: #075f46;
+}
+
+.plannerKpis {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 9px;
 }
 
-.summaryWide .plannerSummary {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.plannerKpis > div {
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+  display: grid;
+  gap: 3px;
+}
+
+.plannerKpis span,
+.salaryResults span,
+.kzMonthTotals span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.plannerKpis b {
+  font-size: 17px;
+  overflow-wrap: anywhere;
+}
+
+.plannerMainGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(340px, .85fr);
+  gap: 10px;
+}
+
+.plannerCard,
+.plannerSources,
+.forecastBlock {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fff;
+  padding: 13px;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.kzSyncCard {
+  border-color: #b8ead0;
+  background: linear-gradient(180deg, #fbfffd 0%, #fff 55%);
+}
+
+.kzMonthTotals {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.kzMonthTotals > div,
+.salaryResults > div {
+  border: 1px solid #edf2f7;
+  border-radius: 14px;
+  background: #f8fafc;
+  padding: 10px;
+  display: grid;
+  gap: 3px;
+}
+
+.kzMonthTotals .income b {
+  color: var(--green);
+}
+
+.kzMonthTotals .expense b {
+  color: var(--red);
+}
+
+.kzBreakdown {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.kzBreakdown > div {
+  min-width: 0;
+  border-top: 1px solid #eaf0f6;
+  padding-top: 10px;
+}
+
+.kzBreakdown h4 {
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  margin-bottom: 5px;
+}
+
+.breakdownLine {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 30px;
+  border-bottom: 1px dashed #e8edf4;
+  font-size: 12px;
+}
+
+.breakdownLine span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.breakdownLine b {
+  font-size: 12px;
+}
+
+.emptyMini {
+  color: var(--muted);
+  padding: 8px 0;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.salaryGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
 }
 
 .checkLine {
@@ -933,35 +1109,14 @@ select {
   height: 18px;
 }
 
-.salaryResults,
-.plannerSummary {
+.salaryResults {
   display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
-.salaryResults {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.salaryResults > div,
-.plannerSummary > div {
-  border: 1px solid #edf2f7;
-  border-radius: 14px;
-  background: #f8fafc;
-  padding: 9px;
-  display: grid;
-  gap: 2px;
-}
-
-.salaryResults span,
-.plannerSummary span {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 850;
-}
-
 .salaryResults b,
-.plannerSummary b {
+.kzMonthTotals b {
   font-size: 16px;
 }
 
@@ -979,21 +1134,6 @@ select {
   font-size: 11px;
   font-weight: 750;
   line-height: 1.4;
-}
-
-.plannerSources {
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  background: #fff;
-  padding: 12px;
-  display: grid;
-  gap: 10px;
-}
-
-.sourcesHead {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
 }
 
 .sourceTableWrap,
@@ -1018,7 +1158,7 @@ select {
 .plannerMatrix td {
   border-right: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
-  padding: 5px;
+  padding: 6px;
   background: #fff;
 }
 
@@ -1036,9 +1176,13 @@ select {
 
 .sourceTable input,
 .sourceTable select {
-  height: 30px;
+  height: 31px;
   border-radius: 9px;
   min-width: 82px;
+}
+
+.sourceTable .titleInput {
+  min-width: 190px;
 }
 
 .sourceTable input[type="checkbox"] {
@@ -1053,6 +1197,39 @@ select {
 
 .sourceTable tr.expense td {
   background: #fffafa;
+}
+
+.sourceTable input:disabled {
+  background: #eef4ff;
+  color: #3154b8;
+  font-weight: 850;
+}
+
+.amountEditor {
+  display: grid;
+  grid-template-columns: 105px 54px;
+  gap: 4px;
+}
+
+.amountEditor input,
+.amountEditor select {
+  min-width: 0;
+}
+
+.periodEditor {
+  display: grid;
+  grid-template-columns: 128px 12px 128px;
+  gap: 4px;
+  align-items: center;
+}
+
+.periodEditor input {
+  min-width: 0;
+}
+
+.periodEditor span {
+  color: var(--muted);
+  text-align: center;
 }
 
 .rowTools {
@@ -1071,18 +1248,29 @@ select {
 
 .plannerMatrix th,
 .plannerMatrix td {
-  min-width: 88px;
+  min-width: 92px;
   text-align: right;
-  height: 30px;
+  height: 31px;
   white-space: nowrap;
 }
 
 .plannerMatrix .stickyCol {
   position: sticky;
   left: 0;
-  min-width: 170px;
+  min-width: 205px;
   text-align: left;
   z-index: 2;
+  box-shadow: 5px 0 9px rgba(15, 23, 42, .04);
+}
+
+.plannerMatrix thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
+.plannerMatrix thead .stickyCol {
+  z-index: 4;
 }
 
 .plannerMatrix .strong th,
@@ -1094,17 +1282,50 @@ select {
 .plannerMatrix .section th,
 .plannerMatrix .section td {
   background: #f8fafc;
-  font-weight: 800;
+  font-weight: 850;
+}
+
+.plannerMatrix .countrySection th,
+.plannerMatrix .countrySection td {
+  background: #172033;
+  color: #fff;
+  font-weight: 900;
+}
+
+.plannerMatrix .countrySection.synced th,
+.plannerMatrix .countrySection.synced td {
+  background: #dff8ea;
+  color: #075f46;
+}
+
+.plannerMatrix .detailRow th {
+  padding-left: 18px;
+  color: var(--muted);
+  font-weight: 750;
+}
+
+.plannerMatrix .detailRow td {
+  color: #475569;
 }
 
 .badCell {
   background: #fff1f0 !important;
-  color: var(--red);
+  color: var(--red) !important;
   font-weight: 900;
 }
 
-@media (max-width: 1100px) {
-  .plannerGrid {
+@media (max-width: 1320px) {
+  .scenarioBar {
+    grid-template-columns: repeat(3, minmax(150px, 1fr));
+  }
+
+  .plannerKpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1050px) {
+  .plannerMainGrid {
     grid-template-columns: 1fr;
   }
 
@@ -1114,28 +1335,18 @@ select {
   }
 
   .relocationActions,
-  .sourcesHead > div {
+  .sourcesHead > div:last-child {
     justify-content: flex-start;
   }
 }
 
 @media (max-width: 760px) {
-  .plannerInputs,
+  .scenarioBar,
+  .plannerKpis,
+  .kzMonthTotals,
+  .kzBreakdown,
   .salaryGrid,
-  .plannerSummary,
-  .summaryWide .plannerSummary,
   .salaryResults {
     grid-template-columns: 1fr;
   }
-}
-
-.sourceTable input:disabled {
-  background: #eef4ff;
-  color: #3154b8;
-  font-weight: 850;
-}
-
-.sourceTable th:nth-child(7),
-.sourceTable td:nth-child(7) {
-  min-width: 146px;
 }

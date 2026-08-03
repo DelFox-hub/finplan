@@ -1240,7 +1240,14 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
           </>
         )}
 
-        {mainTab === "relocation" && <MigrationPlanner userId={userId} />}
+        {mainTab === "relocation" && (
+          <MigrationPlanner
+            userId={userId}
+            diaryStartMonth={calcStart}
+            getDiaryMonthPlan={oneMonthPlan}
+            getDiaryBalanceBeforeMonth={balanceBeforeMonth}
+          />
+        )}
 
         <button className="settings-fab" onClick={() => setSettingsOpen(true)}>⚙</button>
         <button className="logoutBtn" onClick={signOut}>выйти</button>

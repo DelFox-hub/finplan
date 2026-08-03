@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 import MigrationPlanner from "@/components/MigrationPlanner";
 import MonthPicker from "@/components/MonthPicker";
@@ -470,6 +470,79 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
     setViewMonthState(safeViewMonth(month));
     setOpsPage(1);
   }
+
+  useEffect(() => {
+    if (!settings || !payments.length) return;
+
+    const current = currentMonth();
+    const syncKey = [
+      userId,
+      payments.length,
+      operations.length,
+      exclusions.length,
+      diaryStart,
+      current
+    ].join("|");
+
+    if (autoAppliedMonthsRef.current === syncKey) return;
+    autoAppliedMonthsRef.current = syncKey;
+
+    let cancelled = false;
+
+    async function autoApplyPastPayments() {
+      const from = monthIndex(diaryStart);
+      const to = monthIndex(current) - 1;
+      if (to < from) return;
+
+      const existingKeys = new Set(
+        operations
+          .filter((o) => o.source_recurring_payment_id)
+          .map((o) => `${o.source_recurring_payment_id}:${String(o.op_date).slice(0, 7)}`)
+      );
+
+      const excludedKeys = new Set(exclusions.map((e) => `${e.recurring_payment_id}:${e.month}`));
+      const toInsert: Omit<Operation, "id">[] = [];
+
+      payments.forEach((payment) => {
+        for (let i = from; i <= to; i += 1) {
+          const month = monthFromIndex(i);
+          const key = `${payment.id}:${month}`;
+          if (existingKeys.has(key)) continue;
+          if (excludedKeys.has(key)) continue;
+          if (!paymentDue(payment, month, calcStart)) continue;
+
+          toInsert.push({
+            user_id: userId,
+            op_date: dateForDay(month, payment.due_day),
+            kind: "expense",
+            category_id: payment.category_id,
+            title: payment.title,
+            amount: Number(payment.amount || 0),
+            completed: true,
+            sort_order: Number(payment.sort_order || 0),
+            source_recurring_payment_id: payment.id,
+            source_recurring_income_id: null,
+            source_month: month
+          });
+        }
+      });
+
+      if (!toInsert.length) return;
+
+      const { data, error } = await supabase.from("operations").insert(toInsert).select("*");
+      if (cancelled) return;
+      if (error) {
+        flash(error.message);
+        return;
+      }
+      setOperations((prev) => [...prev, ...((data || []).map((row) => ({ ...row, amount: Number(row.amount || 0) }))) ]);
+    }
+
+    autoApplyPastPayments();
+    return () => {
+      cancelled = true;
+    };
+  }, [settings, payments, operations, exclusions, diaryStart, calcStart, userId]);
 
   function monthOps(month = viewMonth) {
     return operations

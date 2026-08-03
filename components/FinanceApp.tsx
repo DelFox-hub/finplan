@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 import MigrationPlanner from "@/components/MigrationPlanner";
 import MonthPicker from "@/components/MonthPicker";
@@ -195,8 +195,10 @@ function validInMonth(item: { valid_from_month?: string | null; valid_to_month?:
   return true;
 }
 
-function creditDuration(p: RecurringPayment) {
-  return Math.max(Number(p.total_months || 0), 0);
+function creditRemainingMonths(p: RecurringPayment) {
+  const total = Math.max(Number(p.total_months || 0), 0);
+  const paid = Math.min(Math.max(Number(p.paid_months || 0), 0), total);
+  return Math.max(total - paid, 0);
 }
 
 function categoryName(categories: Category[], id: string | null, fallback = "Другое") {
@@ -214,8 +216,8 @@ function paymentDue(payment: RecurringPayment, month: string, calcStart: string)
   if (payment.payment_type === "credit") {
     // У кредитов нет отдельного поля «До»: конец всегда считается от месяца
     // начала и общей длительности. Скрытое старое valid_to_month не учитывается.
-    const duration = creditDuration(payment);
-    return duration > 0 && cur < start + duration;
+    const remaining = creditRemainingMonths(payment);
+    return remaining > 0 && cur < start + remaining;
   }
 
   return validInMonth(payment, month);
@@ -232,10 +234,6 @@ function incomeDue(income: RecurringIncome, month: string, calcStart: string) {
 
   const diff = cur - start;
   return diff % (freqMonths[income.frequency] || 1) === 0;
-}
-
-function isUUID(value: unknown) {
-  return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 function nextSortOrder(items: { sort_order: number }[]) {
@@ -281,8 +279,9 @@ function compareSettingsValues(left: unknown, right: unknown) {
 }
 
 
-export default function FinanceApp({ userId, userEmail }: { userId: string; userEmail: string }) {
+export default function FinanceApp({ userId }: { userId: string }) {
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [message, setMessage] = useState("");
   const [settings, setSettings] = useState<Settings | null>(null);
   const [expenseCategories, setExpenseCategories] = useState<Category[]>([]);
@@ -302,6 +301,13 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
     status: "saved",
     message: "Все изменения сохранены"
   });
+  const saveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const saveChainsRef = useRef<Record<string, Promise<void>>>({});
+  const saveErrorKeysRef = useRef<Set<string>>(new Set());
+  const activeSaveRequestsRef = useRef(0);
+  const pendingSettingsRef = useRef<Settings | null>(null);
+  const pendingPaymentPatchesRef = useRef<Record<string, Partial<RecurringPayment>>>({});
+  const pendingIncomePatchesRef = useRef<Record<string, Partial<RecurringIncome>>>({});
   const [settingsTableFilters, setSettingsTableFilters] = useState<Record<SettingsTableKey, Record<string, string>>>({
     payments: { active: "all", title: "", category: "", amount: "", due_day: "", from: "", to: "" },
     credits: { active: "all", title: "", category: "", amount: "", due_day: "", total_months: "", paid_months: "", from: "" },
@@ -333,6 +339,10 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
   useEffect(() => {
     loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => () => {
+    Object.values(saveTimersRef.current).forEach((timer) => clearTimeout(timer));
   }, []);
 
   function flash(text: string) {
@@ -384,9 +394,10 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
 
   async function loadAll() {
     setLoading(true);
+    setLoadError("");
 
-    let [{ data: settingsData }, { data: expenseData }, { data: incomeData }, { data: opData }, { data: payData }, { data: recIncomeData }, { data: exclData }, { data: collapsedData }] =
-      await Promise.all([
+    try {
+      const results = await Promise.all([
         supabase.from("user_settings").select("*").eq("user_id", userId).maybeSingle(),
         supabase.from("expense_categories").select("*").eq("user_id", userId).order("sort_order"),
         supabase.from("income_categories").select("*").eq("user_id", userId).order("sort_order"),
@@ -397,99 +408,146 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
         supabase.from("collapsed_groups").select("*").eq("user_id", userId)
       ]);
 
-    if (!settingsData) {
-      const start = currentMonth();
-      const insert = {
-        user_id: userId,
-        calc_start_month: start,
-        diary_start_month: start,
-        forecast_start_month: start,
-        start_balance: 0,
-        plan_income: 0,
-        plan_other: 0,
-        years: 3,
-        currency: "KZT"
-      };
-      const { data } = await supabase.from("user_settings").insert(insert).select("*").single();
-      settingsData = data;
-    }
+      const queryError = results.find((result) => result.error)?.error;
+      if (queryError) throw queryError;
 
-    if (!expenseData?.length) {
-      const rows = defaultExpenseCategories.map((name, i) => ({ user_id: userId, name, sort_order: (i + 1) * 10 }));
-      const { data } = await supabase.from("expense_categories").insert(rows).select("*").order("sort_order");
-      expenseData = data || [];
-    }
+      let [
+        { data: settingsData },
+        { data: expenseData },
+        { data: incomeData },
+        { data: opData },
+        { data: payData },
+        { data: recIncomeData },
+        { data: exclData },
+        { data: collapsedData }
+      ] = results;
 
-    if (!incomeData?.length) {
-      const rows = defaultIncomeCategories.map((name, i) => ({ user_id: userId, name, sort_order: (i + 1) * 10 }));
-      const { data } = await supabase.from("income_categories").insert(rows).select("*").order("sort_order");
-      incomeData = data || [];
-    }
-
-    // Старые версии приложения сохраняли регулярные платежи как отдельные операции.
-    // Теперь настройки являются единственным источником истины, поэтому такие копии
-    // удаляются: иначе они дают пустые галочки, дубли и устаревшие суммы.
-    const materializedPaymentOps = (opData || []).filter((x: any) => x.source_recurring_payment_id);
-    if (materializedPaymentOps.length) {
-      for (let i = 0; i < materializedPaymentOps.length; i += 200) {
-        const ids = materializedPaymentOps.slice(i, i + 200).map((x: any) => x.id);
-        await supabase.from("operations").delete().eq("user_id", userId).in("id", ids);
+      if (!settingsData) {
+        const startMonth = currentMonth();
+        const insert = {
+          user_id: userId,
+          calc_start_month: startMonth,
+          diary_start_month: startMonth,
+          forecast_start_month: startMonth,
+          start_balance: 0,
+          plan_income: 0,
+          plan_other: 0,
+          years: 3,
+          currency: "KZT"
+        };
+        const { data, error } = await supabase.from("user_settings").insert(insert).select("*").single();
+        if (error) throw error;
+        settingsData = data;
       }
-      opData = (opData || []).filter((x: any) => !x.source_recurring_payment_id);
+
+      if (!expenseData?.length) {
+        const rows = defaultExpenseCategories.map((name, index) => ({ user_id: userId, name, sort_order: (index + 1) * 10 }));
+        const { data, error } = await supabase.from("expense_categories").insert(rows).select("*").order("sort_order");
+        if (error) throw error;
+        expenseData = data || [];
+      }
+
+      if (!incomeData?.length) {
+        const rows = defaultIncomeCategories.map((name, index) => ({ user_id: userId, name, sort_order: (index + 1) * 10 }));
+        const { data, error } = await supabase.from("income_categories").insert(rows).select("*").order("sort_order");
+        if (error) throw error;
+        incomeData = data || [];
+      }
+
+      // Старые версии сохраняли регулярные платежи как отдельные операции.
+      // В текущей модели они строятся из настроек как виртуальные строки.
+      const materializedPaymentOps = (opData || []).filter((row: any) => row.source_recurring_payment_id);
+      if (materializedPaymentOps.length) {
+        // Переносим снятые галочки старых материальных строк в таблицу исключений,
+        // прежде чем удалять дублирующие операции.
+        const existingExclusionKeys = new Set((exclData || []).map((row: any) => `${row.recurring_payment_id}:${row.month}`));
+        const migratedByKey = new Map<string, PaymentExclusion>();
+        materializedPaymentOps
+          .filter((row: any) => !row.completed)
+          .forEach((row: any) => {
+            const migrated = {
+              user_id: userId,
+              recurring_payment_id: row.source_recurring_payment_id,
+              month: row.source_month || String(row.op_date || "").slice(0, 7)
+            };
+            const key = `${migrated.recurring_payment_id}:${migrated.month}`;
+            if (migrated.month && !existingExclusionKeys.has(key)) migratedByKey.set(key, migrated);
+          });
+        const migratedExclusions = [...migratedByKey.values()];
+
+        if (migratedExclusions.length) {
+          const { error } = await supabase.from("monthly_payment_exclusions").upsert(migratedExclusions);
+          if (error) throw error;
+          exclData = [...(exclData || []), ...migratedExclusions];
+        }
+
+        for (let index = 0; index < materializedPaymentOps.length; index += 200) {
+          const ids = materializedPaymentOps.slice(index, index + 200).map((row: any) => row.id);
+          const { error } = await supabase.from("operations").delete().eq("user_id", userId).in("id", ids);
+          if (error) throw error;
+        }
+        opData = (opData || []).filter((row: any) => !row.source_recurring_payment_id);
+      }
+
+      // У кредитов окончание рассчитывается по длительности, поэтому скрытое
+      // наследованное поле valid_to_month очищается один раз при загрузке.
+      const creditsWithLegacyEnd = (payData || []).filter((row: any) => row.payment_type === "credit" && row.valid_to_month);
+      if (creditsWithLegacyEnd.length) {
+        const ids = creditsWithLegacyEnd.map((row: any) => row.id);
+        const { error } = await supabase.from("recurring_payments").update({ valid_to_month: null }).eq("user_id", userId).in("id", ids);
+        if (error) throw error;
+        payData = (payData || []).map((row: any) => row.payment_type === "credit" ? { ...row, valid_to_month: null } : row);
+      }
+
+      const legacyStart = settingsData?.calc_start_month || currentMonth();
+      const loadedDiaryStart = settingsData?.diary_start_month || legacyStart;
+      const loadedForecastStart = settingsData?.forecast_start_month || legacyStart;
+      const loadedCalcStart = monthFromIndex(Math.min(monthIndex(loadedDiaryStart), monthIndex(loadedForecastStart)));
+
+      setSettings({
+        ...settingsData,
+        calc_start_month: loadedCalcStart,
+        diary_start_month: loadedDiaryStart,
+        forecast_start_month: loadedForecastStart,
+        start_balance: Number(settingsData?.start_balance || 0),
+        plan_income: Number(settingsData?.plan_income || 0),
+        plan_other: Number(settingsData?.plan_other || 0),
+        years: Number(settingsData?.years || 3)
+      });
+
+      setExpenseCategories((expenseData || []).map((row: any) => ({ ...row, sort_order: Number(row.sort_order || 0) })));
+      setIncomeCategories((incomeData || []).map((row: any) => ({ ...row, sort_order: Number(row.sort_order || 0) })));
+      setOperations((opData || []).map((row: any) => ({
+        ...row,
+        amount: Number(row.amount || 0),
+        sort_order: Number(row.sort_order || 0),
+        completed: !!row.completed
+      })));
+      setPayments((payData || []).map((row: any) => ({
+        ...row,
+        amount: Number(row.amount || 0),
+        due_day: Number(row.due_day || 1),
+        total_months: Math.max(Number(row.total_months || 0), 0),
+        paid_months: Math.max(Number(row.paid_months || 0), 0),
+        sort_order: Number(row.sort_order || 0)
+      })));
+      setIncomes((recIncomeData || []).map((row: any) => ({
+        ...row,
+        amount: Number(row.amount || 0),
+        due_day: Number(row.due_day || 1),
+        sort_order: Number(row.sort_order || 0)
+      })));
+      setExclusions(exclData || []);
+      setCollapsedGroups(collapsedData || []);
+      setViewMonthState(safeViewMonth(viewMonth, loadedDiaryStart));
+    } catch (error: any) {
+      const text = error?.message || "Не удалось загрузить данные";
+      setLoadError(text);
+      setMessage(text);
+      failSave(`Ошибка загрузки: ${text}`);
+    } finally {
+      setLoading(false);
     }
-
-    // Поле «До» у кредитов удалено из интерфейса. Очищаем старые значения,
-    // чтобы скрытая дата больше не могла обрезать кредитный график.
-    const creditsWithLegacyEnd = (payData || []).filter((x: any) => x.payment_type === "credit" && x.valid_to_month);
-    if (creditsWithLegacyEnd.length) {
-      const ids = creditsWithLegacyEnd.map((x: any) => x.id);
-      await supabase.from("recurring_payments").update({ valid_to_month: null }).eq("user_id", userId).in("id", ids);
-      payData = (payData || []).map((x: any) => x.payment_type === "credit" ? { ...x, valid_to_month: null } : x);
-    }
-
-    const legacyStart = settingsData?.calc_start_month || currentMonth();
-    const loadedDiaryStart = settingsData?.diary_start_month || legacyStart;
-    const loadedForecastStart = settingsData?.forecast_start_month || legacyStart;
-    const loadedCalcStart = monthFromIndex(Math.min(monthIndex(loadedDiaryStart), monthIndex(loadedForecastStart)));
-
-    setSettings({
-      ...settingsData,
-      calc_start_month: loadedCalcStart,
-      diary_start_month: loadedDiaryStart,
-      forecast_start_month: loadedForecastStart,
-      start_balance: Number(settingsData?.start_balance || 0),
-      plan_income: Number(settingsData?.plan_income || 0),
-      plan_other: Number(settingsData?.plan_other || 0),
-      years: Number(settingsData?.years || 3)
-    });
-
-    setExpenseCategories((expenseData || []).map((x: any) => ({ ...x, sort_order: Number(x.sort_order || 0) })));
-    setIncomeCategories((incomeData || []).map((x: any) => ({ ...x, sort_order: Number(x.sort_order || 0) })));
-    setOperations((opData || []).map((x: any) => ({
-      ...x,
-      amount: Number(x.amount || 0),
-      sort_order: Number(x.sort_order || 0),
-      completed: !!x.completed
-    })));
-    setPayments((payData || []).map((x: any) => ({
-      ...x,
-      amount: Number(x.amount || 0),
-      due_day: Number(x.due_day || 1),
-      total_months: Number(x.total_months || 0),
-      paid_months: Number(x.paid_months || 0),
-      sort_order: Number(x.sort_order || 0)
-    })));
-    setIncomes((recIncomeData || []).map((x: any) => ({
-      ...x,
-      amount: Number(x.amount || 0),
-      due_day: Number(x.due_day || 1),
-      sort_order: Number(x.sort_order || 0)
-    })));
-    setExclusions(exclData || []);
-    setCollapsedGroups(collapsedData || []);
-
-    setViewMonthState(safeViewMonth(viewMonth, loadedDiaryStart));
-    setLoading(false);
   }
 
   function beginSave(message = "Сохранение изменений…") {
@@ -504,9 +562,83 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
     setSaveState({ status: "error", message });
   }
 
-  async function updateSettings(patch: Partial<Settings>) {
+
+  function queueDatabaseSave(
+    key: string,
+    task: () => Promise<{ message?: string } | null | undefined>,
+    delay = 350
+  ) {
+    const existing = saveTimersRef.current[key];
+    if (existing) clearTimeout(existing);
+    saveErrorKeysRef.current.delete(key);
+    beginSave();
+
+    saveTimersRef.current[key] = setTimeout(() => {
+      delete saveTimersRef.current[key];
+      const previous = saveChainsRef.current[key] || Promise.resolve();
+
+      let failed = false;
+      const run = previous
+        .catch(() => undefined)
+        .then(async () => {
+          activeSaveRequestsRef.current += 1;
+          try {
+            const error = await task();
+            if (error) {
+              failed = true;
+              saveErrorKeysRef.current.add(key);
+              const text = error.message || "Не удалось сохранить изменения";
+              failSave(`Ошибка сохранения: ${text}`);
+              flash(text);
+            }
+          } catch (error: any) {
+            failed = true;
+            saveErrorKeysRef.current.add(key);
+            const text = error?.message || "Не удалось сохранить изменения";
+            failSave(`Ошибка сохранения: ${text}`);
+            flash(text);
+          } finally {
+            activeSaveRequestsRef.current = Math.max(0, activeSaveRequestsRef.current - 1);
+          }
+        })
+        .finally(() => {
+          if (saveChainsRef.current[key] === run) delete saveChainsRef.current[key];
+          if (
+            !failed
+            && saveErrorKeysRef.current.size === 0
+            && activeSaveRequestsRef.current === 0
+            && Object.keys(saveTimersRef.current).length === 0
+            && Object.keys(saveChainsRef.current).length === 0
+          ) {
+            finishSave();
+          }
+        });
+
+      saveChainsRef.current[key] = run;
+    }, delay);
+  }
+
+  async function cancelQueuedSave(key: string) {
+    const timer = saveTimersRef.current[key];
+    if (timer) clearTimeout(timer);
+    delete saveTimersRef.current[key];
+    const chain = saveChainsRef.current[key];
+    if (chain) await chain.catch(() => undefined);
+  }
+
+  async function cancelAllQueuedSaves() {
+    Object.values(saveTimersRef.current).forEach((timer) => clearTimeout(timer));
+    saveTimersRef.current = {};
+    const chains = Object.values(saveChainsRef.current);
+    if (chains.length) await Promise.allSettled(chains);
+    pendingSettingsRef.current = null;
+    pendingPaymentPatchesRef.current = {};
+    pendingIncomePatchesRef.current = {};
+  }
+
+  function updateSettings(patch: Partial<Settings>) {
     if (!settings) return;
-    const patched = { ...settings, ...patch };
+    const patched = { ...(pendingSettingsRef.current || settings), ...patch };
     const nextDiaryStart = patched.diary_start_month || patched.calc_start_month || currentMonth();
     const nextForecastStart = patched.forecast_start_month || patched.calc_start_month || currentMonth();
     const nextCalcStart = monthFromIndex(Math.min(monthIndex(nextDiaryStart), monthIndex(nextForecastStart)));
@@ -514,7 +646,8 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
       ...patched,
       diary_start_month: nextDiaryStart,
       forecast_start_month: nextForecastStart,
-      calc_start_month: nextCalcStart
+      calc_start_month: nextCalcStart,
+      years: Math.min(Math.max(Number(patched.years || 3), 1), 10)
     };
 
     if (patch.diary_start_month) {
@@ -522,24 +655,25 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
     }
 
     setSettings(next);
-    beginSave();
-    const { error } = await supabase.from("user_settings").upsert({
-      user_id: userId,
-      calc_start_month: next.calc_start_month,
-      diary_start_month: next.diary_start_month,
-      forecast_start_month: next.forecast_start_month,
-      start_balance: Number(next.start_balance || 0),
-      plan_income: Number(next.plan_income || 0),
-      plan_other: Number(next.plan_other || 0),
-      years: Number(next.years || 3),
-      currency: next.currency || "KZT"
+    pendingSettingsRef.current = next;
+    queueDatabaseSave("settings", async () => {
+      const snapshot = pendingSettingsRef.current;
+      if (!snapshot) return null;
+      pendingSettingsRef.current = null;
+      const { error } = await supabase.from("user_settings").upsert({
+        user_id: userId,
+        calc_start_month: snapshot.calc_start_month,
+        diary_start_month: snapshot.diary_start_month,
+        forecast_start_month: snapshot.forecast_start_month,
+        start_balance: Number(snapshot.start_balance || 0),
+        plan_income: Number(snapshot.plan_income || 0),
+        plan_other: Number(snapshot.plan_other || 0),
+        years: Number(snapshot.years || 3),
+        currency: snapshot.currency || "KZT"
+      });
+      if (error && !pendingSettingsRef.current) pendingSettingsRef.current = snapshot;
+      return error;
     });
-    if (error) {
-      failSave(`Ошибка сохранения: ${error.message}`);
-      flash(error.message);
-      return;
-    }
-    finishSave();
   }
 
   function setViewMonth(month: string) {
@@ -641,21 +775,30 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
   }
 
   async function moveOperation(op: Operation, dir: -1 | 1) {
-    const real = monthOps(viewMonth).filter((x) => x.completed === op.completed);
-    const idx = real.findIndex((x) => x.id === op.id);
-    const next = idx + dir;
-    if (idx < 0 || next < 0 || next >= real.length) return;
-    const a = real[idx];
-    const b = real[next];
-    const aOrder = Number(a.sort_order || (idx + 1) * 10);
-    const bOrder = Number(b.sort_order || (next + 1) * 10);
+    const real = monthOps(viewMonth).filter((item) => item.completed === op.completed);
+    const index = real.findIndex((item) => item.id === op.id);
+    const nextIndex = index + dir;
+    if (index < 0 || nextIndex < 0 || nextIndex >= real.length) return;
+    const current = real[index];
+    const target = real[nextIndex];
+    const currentOrder = Number(current.sort_order || (index + 1) * 10);
+    const targetOrder = Number(target.sort_order || (nextIndex + 1) * 10);
 
-    await Promise.all([
-      supabase.from("operations").update({ sort_order: bOrder }).eq("user_id", userId).eq("id", a.id),
-      supabase.from("operations").update({ sort_order: aOrder }).eq("user_id", userId).eq("id", b.id)
+    const [currentResult, targetResult] = await Promise.all([
+      supabase.from("operations").update({ sort_order: targetOrder }).eq("user_id", userId).eq("id", current.id),
+      supabase.from("operations").update({ sort_order: currentOrder }).eq("user_id", userId).eq("id", target.id)
     ]);
+    const error = currentResult.error || targetResult.error;
+    if (error) {
+      flash(error.message);
+      return;
+    }
 
-    setOperations((prev) => prev.map((x) => (x.id === a.id ? { ...x, sort_order: bOrder } : x.id === b.id ? { ...x, sort_order: aOrder } : x)));
+    setOperations((previous) => previous.map((item) => item.id === current.id
+      ? { ...item, sort_order: targetOrder }
+      : item.id === target.id
+        ? { ...item, sort_order: currentOrder }
+        : item));
   }
 
   function openNewOperation() {
@@ -860,14 +1003,22 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
     const isCollapsed = collapsedKeys.has(key);
 
     if (isCollapsed) {
-      await supabase.from("collapsed_groups").delete().eq("user_id", userId).eq("month", viewMonth).eq("category_key", key);
-      setCollapsedGroups((prev) => prev.filter((x) => !(x.month === viewMonth && x.category_key === key)));
+      const { error } = await supabase.from("collapsed_groups").delete().eq("user_id", userId).eq("month", viewMonth).eq("category_key", key);
+      if (error) {
+        flash(error.message);
+        return;
+      }
+      setCollapsedGroups((previous) => previous.filter((item) => !(item.month === viewMonth && item.category_key === key)));
       return;
     }
 
     const row = { user_id: userId, month: viewMonth, category_key: key, collapsed: true };
-    await supabase.from("collapsed_groups").upsert(row);
-    setCollapsedGroups((prev) => [...prev.filter((x) => !(x.month === viewMonth && x.category_key === key)), row]);
+    const { error } = await supabase.from("collapsed_groups").upsert(row);
+    if (error) {
+      flash(error.message);
+      return;
+    }
+    setCollapsedGroups((previous) => [...previous.filter((item) => !(item.month === viewMonth && item.category_key === key)), row]);
   }
 
   async function addCategory(kind: Kind) {
@@ -924,6 +1075,21 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
 
     const table = kind === "expense" ? "expense_categories" : "income_categories";
     beginSave("Удаление статьи…");
+
+    // operations.category_id не имеет внешнего ключа, потому что ссылается
+    // на две разные таблицы. Поэтому связь нужно очистить явно.
+    const { error: operationsError } = await supabase
+      .from("operations")
+      .update({ category_id: null })
+      .eq("user_id", userId)
+      .eq("kind", kind)
+      .eq("category_id", id);
+    if (operationsError) {
+      failSave(`Ошибка сохранения: ${operationsError.message}`);
+      flash(operationsError.message);
+      return;
+    }
+
     const { error } = await supabase.from(table).delete().eq("user_id", userId).eq("id", id);
     if (error) {
       failSave(`Ошибка сохранения: ${error.message}`);
@@ -932,13 +1098,13 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
     }
 
     if (kind === "expense") {
-      setExpenseCategories((prev) => prev.filter((item) => item.id !== id));
-      setPayments((prev) => prev.map((item) => (item.category_id === id ? { ...item, category_id: null } : item)));
+      setExpenseCategories((previous) => previous.filter((item) => item.id !== id));
+      setPayments((previous) => previous.map((item) => item.category_id === id ? { ...item, category_id: null } : item));
     } else {
-      setIncomeCategories((prev) => prev.filter((item) => item.id !== id));
-      setIncomes((prev) => prev.map((item) => (item.category_id === id ? { ...item, category_id: null } : item)));
+      setIncomeCategories((previous) => previous.filter((item) => item.id !== id));
+      setIncomes((previous) => previous.map((item) => item.category_id === id ? { ...item, category_id: null } : item));
     }
-    setOperations((prev) => prev.map((item) => (item.kind === kind && item.category_id === id ? { ...item, category_id: null } : item)));
+    setOperations((previous) => previous.map((item) => item.kind === kind && item.category_id === id ? { ...item, category_id: null } : item));
     finishSave("Статья удалена");
   }
 
@@ -968,24 +1134,49 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
     }
   }
 
-  async function updatePayment(id: string, patch: Partial<RecurringPayment>) {
-    setPayments((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
-    beginSave();
-    const { error } = await supabase.from("recurring_payments").update(patch).eq("user_id", userId).eq("id", id);
-    if (error) {
-      failSave(`Ошибка сохранения: ${error.message}`);
-      flash(error.message);
-      return;
-    }
-    finishSave();
+  function updatePayment(id: string, patch: Partial<RecurringPayment>) {
+    const current = payments.find((payment) => payment.id === id);
+    if (!current) return;
+
+    const normalized: Partial<RecurringPayment> = { ...patch };
+    const nextTotal = patch.total_months !== undefined
+      ? Math.max(Number(patch.total_months || 0), 0)
+      : Math.max(Number(current.total_months || 0), 0);
+    const nextPaid = patch.paid_months !== undefined
+      ? Math.max(Number(patch.paid_months || 0), 0)
+      : Math.max(Number(current.paid_months || 0), 0);
+
+    if (patch.total_months !== undefined) normalized.total_months = nextTotal;
+    if (patch.paid_months !== undefined || nextPaid > nextTotal) normalized.paid_months = Math.min(nextPaid, nextTotal);
+    if (patch.due_day !== undefined) normalized.due_day = clampDay(patch.due_day);
+    if (current.payment_type === "credit") normalized.valid_to_month = null;
+
+    setPayments((previous) => previous.map((payment) => payment.id === id ? { ...payment, ...normalized } : payment));
+    pendingPaymentPatchesRef.current[id] = { ...pendingPaymentPatchesRef.current[id], ...normalized };
+
+    queueDatabaseSave(`payment:${id}`, async () => {
+      const merged = pendingPaymentPatchesRef.current[id];
+      if (!merged || !Object.keys(merged).length) return null;
+      delete pendingPaymentPatchesRef.current[id];
+      const { error } = await supabase.from("recurring_payments").update(merged).eq("user_id", userId).eq("id", id);
+      if (error) pendingPaymentPatchesRef.current[id] = { ...merged, ...pendingPaymentPatchesRef.current[id] };
+      return error;
+    });
   }
 
   async function deletePayment(id: string) {
     if (!confirm("Удалить регулярный платёж?")) return;
+    await cancelQueuedSave(`payment:${id}`);
+    delete pendingPaymentPatchesRef.current[id];
     beginSave("Удаление строки…");
 
     // Сначала удаляем копии, созданные старыми версиями приложения.
-    await supabase.from("operations").delete().eq("user_id", userId).eq("source_recurring_payment_id", id);
+    const { error: legacyError } = await supabase.from("operations").delete().eq("user_id", userId).eq("source_recurring_payment_id", id);
+    if (legacyError) {
+      failSave(`Ошибка сохранения: ${legacyError.message}`);
+      flash(legacyError.message);
+      return;
+    }
     const { error } = await supabase.from("recurring_payments").delete().eq("user_id", userId).eq("id", id);
     if (error) {
       failSave(`Ошибка сохранения: ${error.message}`);
@@ -1022,20 +1213,27 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
     }
   }
 
-  async function updateIncome(id: string, patch: Partial<RecurringIncome>) {
-    setIncomes((prev) => prev.map((i) => (i.id === id ? { ...i, ...patch } : i)));
-    beginSave();
-    const { error } = await supabase.from("recurring_incomes").update(patch).eq("user_id", userId).eq("id", id);
-    if (error) {
-      failSave(`Ошибка сохранения: ${error.message}`);
-      flash(error.message);
-      return;
-    }
-    finishSave();
+  function updateIncome(id: string, patch: Partial<RecurringIncome>) {
+    const normalized: Partial<RecurringIncome> = { ...patch };
+    if (patch.due_day !== undefined) normalized.due_day = clampDay(patch.due_day);
+
+    setIncomes((previous) => previous.map((income) => income.id === id ? { ...income, ...normalized } : income));
+    pendingIncomePatchesRef.current[id] = { ...pendingIncomePatchesRef.current[id], ...normalized };
+
+    queueDatabaseSave(`income:${id}`, async () => {
+      const merged = pendingIncomePatchesRef.current[id];
+      if (!merged || !Object.keys(merged).length) return null;
+      delete pendingIncomePatchesRef.current[id];
+      const { error } = await supabase.from("recurring_incomes").update(merged).eq("user_id", userId).eq("id", id);
+      if (error) pendingIncomePatchesRef.current[id] = { ...merged, ...pendingIncomePatchesRef.current[id] };
+      return error;
+    });
   }
 
   async function deleteIncome(id: string) {
     if (!confirm("Удалить регулярный доход?")) return;
+    await cancelQueuedSave(`income:${id}`);
+    delete pendingIncomePatchesRef.current[id];
     beginSave("Удаление строки…");
     const { error } = await supabase.from("recurring_incomes").delete().eq("user_id", userId).eq("id", id);
     if (error) {
@@ -1071,17 +1269,23 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
       return;
     }
 
+    await cancelAllQueuedSaves();
     setLoading(true);
 
     try {
       // Deletes are sequential to avoid FK races during import.
-      await supabase.from("monthly_payment_exclusions").delete().eq("user_id", userId);
-      await supabase.from("collapsed_groups").delete().eq("user_id", userId);
-      await supabase.from("operations").delete().eq("user_id", userId);
-      await supabase.from("recurring_incomes").delete().eq("user_id", userId);
-      await supabase.from("recurring_payments").delete().eq("user_id", userId);
-      await supabase.from("income_categories").delete().eq("user_id", userId);
-      await supabase.from("expense_categories").delete().eq("user_id", userId);
+      for (const table of [
+        "monthly_payment_exclusions",
+        "collapsed_groups",
+        "operations",
+        "recurring_incomes",
+        "recurring_payments",
+        "income_categories",
+        "expense_categories"
+      ]) {
+        const { error } = await supabase.from(table).delete().eq("user_id", userId);
+        if (error) throw error;
+      }
 
       const isSupabaseExport = Array.isArray(legacy.expenseCategories) || Array.isArray(legacy.incomeCategories) || Array.isArray(legacy.payments) || Array.isArray(legacy.incomes);
 
@@ -1146,7 +1350,7 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
           total_months: Number(s.total_months ?? s.totalMonths ?? s.repeatMonths ?? s.creditMonths ?? 0),
           paid_months: Number(s.paid_months ?? s.paidMonths ?? s.paid ?? 0),
           valid_from_month: cleanMonth(s.valid_from_month ?? s.validFrom ?? s.startMonth),
-          valid_to_month: cleanMonth(s.valid_to_month ?? s.validTo),
+          valid_to_month: (s.payment_type || s.type) === "credit" ? null : cleanMonth(s.valid_to_month ?? s.validTo),
           sort_order: Number(s.sort_order ?? s.order ?? (i + 1) * 10)
         };
       });
@@ -1188,7 +1392,7 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
           : (legacy.expenseCategories || []).find((c: any) => c.id === o.category_id)?.name);
         return {
           user_id: userId,
-          op_date: o.op_date || o.date || `${calcStart}-01`,
+          op_date: o.op_date || o.date || `${importedCalcStart}-01`,
           kind,
           category_id: kind === "income"
             ? oldIncomeIdToNew.get(String(o.category_id)) || incomeMap.get(categoryTitle || "Доход") || incCats?.[0]?.id || null
@@ -1229,7 +1433,10 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
         category_key: g.category_key,
         collapsed: g.collapsed !== false
       })).filter((g: any) => g.month && g.category_key);
-      if (collapsedRows.length) await supabase.from("collapsed_groups").upsert(collapsedRows);
+      if (collapsedRows.length) {
+        const { error } = await supabase.from("collapsed_groups").upsert(collapsedRows);
+        if (error) throw error;
+      }
 
       await loadAll();
       setViewMonthState(importedDiaryStart);
@@ -1359,8 +1566,18 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
     return [...names];
   }, [forecast]);
 
-  if (loading || !settings) {
+  if (loading) {
     return <main className="loading">Загрузка дневника…</main>;
+  }
+
+  if (!settings) {
+    return (
+      <main className="loading loadingError">
+        <b>Не удалось загрузить дневник</b>
+        <span>{loadError || "Проверь подключение к Supabase и применённые миграции."}</span>
+        <button type="button" className="btn blue" onClick={() => loadAll()}>Повторить</button>
+      </main>
+    );
   }
 
   return (
@@ -1783,7 +2000,7 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
                                 <td><input type="number" value={p.amount} onChange={(e) => updatePayment(p.id, { amount: Number(e.target.value || 0) })} /></td>
                                 <td><input type="number" min="1" max="31" value={p.due_day} onChange={(e) => updatePayment(p.id, { due_day: Number(e.target.value || 1) })} /></td>
                                 <td><input type="number" min="0" value={p.total_months} onChange={(e) => updatePayment(p.id, { total_months: Number(e.target.value || 0) })} /></td>
-                                <td><input type="number" min="0" value={p.paid_months} onChange={(e) => updatePayment(p.id, { paid_months: Number(e.target.value || 0) })} /></td>
+                                <td><input type="number" min="0" max={Math.max(Number(p.total_months || 0), 0)} value={p.paid_months} onChange={(e) => updatePayment(p.id, { paid_months: Number(e.target.value || 0) })} /></td>
                                 <td><MonthPicker value={p.valid_from_month} onChange={(value) => updatePayment(p.id, { valid_from_month: value })} nullable /></td>
                                 <td><button type="button" className="iconDelete mini" aria-label={`Удалить ${p.title}`} onClick={() => deletePayment(p.id)}>×</button></td>
                               </tr>

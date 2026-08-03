@@ -16,5 +16,5 @@ export default async function AppPage() {
     redirect("/login");
   }
 
-  return <FinanceApp userId={data.user.id} userEmail={data.user.email || ""} />;
+  return <FinanceApp userId={data.user.id} />;
 }

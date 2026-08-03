@@ -235,15 +235,17 @@ function effectiveRowCurrency(row: PlanRow): Currency {
 }
 
 function calcGermanNet(gross: number, options: { kkAdditional: number; hasChildren: boolean; churchTax: boolean }) {
+  const safeGross = Math.max(Number(gross || 0), 0);
+  const additionalRate = Math.max(Number(options.kkAdditional || 0), 0);
   const bbgRv = 8450;
   const bbgKv = 5812.5;
-  const rv = Math.min(gross, bbgRv) * 0.093;
-  const alv = Math.min(gross, bbgRv) * 0.013;
-  const kv = Math.min(gross, bbgKv) * ((0.146 + Number(options.kkAdditional || 0)) / 2);
+  const rv = Math.min(safeGross, bbgRv) * 0.093;
+  const alv = Math.min(safeGross, bbgRv) * 0.013;
+  const kv = Math.min(safeGross, bbgKv) * ((0.146 + additionalRate) / 2);
   const pvRate = options.hasChildren ? 0.018 : 0.024;
-  const pv = Math.min(gross, bbgKv) * pvRate;
+  const pv = Math.min(safeGross, bbgKv) * pvRate;
 
-  const yearlyGross = gross * 12;
+  const yearlyGross = safeGross * 12;
   const taxable = Math.max(0, yearlyGross - 1230 - 36);
   const incomeTaxYear = roughGermanIncomeTax2026(taxable);
   const lohnsteuer = incomeTaxYear / 12;
@@ -251,8 +253,8 @@ function calcGermanNet(gross: number, options: { kkAdditional: number; hasChildr
   const church = options.churchTax ? lohnsteuer * 0.09 : 0;
   const deductions = rv + alv + kv + pv + lohnsteuer + soli + church;
   return {
-    gross,
-    net: Math.max(0, gross - deductions),
+    gross: safeGross,
+    net: Math.max(0, safeGross - deductions),
     deductions
   };
 }
@@ -285,23 +287,32 @@ function normalizePlan(input: Partial<MigrationPlan> | null | undefined, diarySt
     months: Math.min(Math.max(Number(raw.months || base.months), 1), 120),
     eurKzt: Math.max(Number(raw.eurKzt || base.eurKzt || 1), 1),
     startBalanceEur: Number(raw.startBalanceEur || 0),
+    grossPartTime: Math.max(Number(raw.grossPartTime ?? base.grossPartTime), 0),
+    grossMain: Math.max(Number(raw.grossMain ?? base.grossMain), 0),
+    kkAdditional: Math.max(Number(raw.kkAdditional ?? base.kkAdditional), 0),
+    hasChildren: !!raw.hasChildren,
+    churchTax: !!raw.churchTax,
     rows: rows
       .filter((row: any) => row.country !== "KZ")
-      .map((row: any) => ({
-        id: row.id || uuid(),
-        kind: row.kind === "income" ? "income" : "expense",
-        title: row.title || "Строка",
-        country: row.country === "OTHER" ? "OTHER" : "DE",
-        currency: row.currency === "EUR" ? "EUR" : "KZT",
-        amount: Number(row.amount || 0),
-        autoSource: row.autoSource === "partTimeNet" || row.autoSource === "mainNet" ? row.autoSource : "",
-        frequency: ["monthly", "quarterly", "yearly", "once"].includes(row.frequency) ? row.frequency : "monthly",
-        startMonth: row.startMonth || safeStart,
-        endMonth: row.endMonth || "",
-        active: row.active !== false,
-        group: row.group || (row.kind === "income" ? "доход" : "расход"),
-        comment: row.comment || ""
-      }))
+      .map((row: any) => {
+        const rowStart = row.startMonth && monthIndex(row.startMonth) >= monthIndex(safeStart) ? row.startMonth : safeStart;
+        const rowEnd = row.endMonth && monthIndex(row.endMonth) >= monthIndex(rowStart) ? row.endMonth : "";
+        return {
+          id: row.id || uuid(),
+          kind: row.kind === "income" ? "income" : "expense",
+          title: row.title || "Строка",
+          country: row.country === "OTHER" ? "OTHER" : "DE",
+          currency: row.currency === "EUR" ? "EUR" : "KZT",
+          amount: Number(row.amount || 0),
+          autoSource: row.autoSource === "partTimeNet" || row.autoSource === "mainNet" ? row.autoSource : "",
+          frequency: ["monthly", "quarterly", "yearly", "once"].includes(row.frequency) ? row.frequency : "monthly",
+          startMonth: rowStart,
+          endMonth: rowEnd,
+          active: row.active !== false,
+          group: row.group || (row.kind === "income" ? "доход" : "расход"),
+          comment: row.comment || ""
+        };
+      })
   };
 }
 
@@ -313,22 +324,37 @@ export default function MigrationPlanner({
 }: MigrationPlannerProps) {
   const [plan, setPlan] = useState<MigrationPlan>(() => defaultPlan(currentMonth()));
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [dirty, setDirty] = useState(false);
   const [message, setMessage] = useState("");
   const [matrixCurrency, setMatrixCurrency] = useState<Currency>("KZT");
   const [forecastView, setForecastView] = useState<"summary" | "detail">("summary");
+  const [showKzCard, setShowKzCard] = useState(false);
+  const [showSalaryCard, setShowSalaryCard] = useState(false);
 
   useEffect(() => {
     loadPlan();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
+
+  useEffect(() => {
+    setPlan((previous) => {
+      const normalized = normalizePlan(previous, diaryStartMonth);
+      const changed = normalized.startMonth !== previous.startMonth
+        || normalized.rows.some((row, index) => row.startMonth !== previous.rows[index]?.startMonth || row.endMonth !== previous.rows[index]?.endMonth);
+      if (changed) setDirty(true);
+      return changed ? normalized : previous;
+    });
+  }, [diaryStartMonth]);
+
   async function loadPlan() {
     setLoading(true);
+    setLoadError("");
     const { data, error } = await supabase.from("relocation_plans").select("*").eq("user_id", userId).maybeSingle();
 
     if (error) {
-      setMessage(error.message);
+      setLoadError(error.message);
       setLoading(false);
       return;
     }
@@ -337,10 +363,16 @@ export default function MigrationPlanner({
       setPlan(normalizePlan(data.data, diaryStartMonth));
     } else {
       const seed = defaultPlan(monthIndex(currentMonth()) < monthIndex(diaryStartMonth) ? diaryStartMonth : currentMonth());
-      await supabase.from("relocation_plans").upsert({ user_id: userId, data: seed });
+      const { error: seedError } = await supabase.from("relocation_plans").upsert({ user_id: userId, data: seed });
+      if (seedError) {
+        setLoadError(seedError.message);
+        setLoading(false);
+        return;
+      }
       setPlan(seed);
     }
 
+    setDirty(false);
     setLoading(false);
   }
 
@@ -372,9 +404,15 @@ export default function MigrationPlanner({
   }
 
   function updateRow(id: string, patch: Partial<PlanRow>) {
-    setPlan((prev) => ({
-      ...prev,
-      rows: prev.rows.map((row) => (row.id === id ? { ...row, ...patch } : row))
+    setPlan((previous) => ({
+      ...previous,
+      rows: previous.rows.map((row) => {
+        if (row.id !== id) return row;
+        const next = { ...row, ...patch };
+        if (patch.startMonth && next.endMonth && monthIndex(next.endMonth) < monthIndex(patch.startMonth)) next.endMonth = "";
+        if (patch.endMonth && monthIndex(patch.endMonth) < monthIndex(next.startMonth || previous.startMonth)) next.endMonth = "";
+        return next;
+      })
     }));
     setDirty(true);
   }
@@ -385,7 +423,7 @@ export default function MigrationPlanner({
       kind,
       title: kind === "income" ? "Новый доход" : "Новый расход",
       country: "DE",
-      currency: kind === "income" ? "EUR" : "EUR",
+      currency: "EUR",
       amount: 0,
       autoSource: "",
       frequency: "monthly",
@@ -501,13 +539,21 @@ export default function MigrationPlanner({
     return {
       activeCount: activeRows.length,
       incomeCount: activeRows.filter((row) => row.kind === "income").length,
-      expenseCount: activeRows.filter((row) => row.kind === "expense").length,
-      germanyCount: activeRows.filter((row) => row.country === "DE").length,
-      otherCount: activeRows.filter((row) => row.country === "OTHER").length
+      expenseCount: activeRows.filter((row) => row.kind === "expense").length
     };
   }, [plan.rows]);
 
   if (loading) return <section className="relocationPanel">Загрузка калькулятора…</section>;
+
+  if (loadError) {
+    return (
+      <section className="relocationPanel plannerLoadError">
+        <b>Не удалось загрузить план переезда</b>
+        <span>{loadError}</span>
+        <button type="button" className="btn blue" onClick={() => loadPlan()}>Повторить</button>
+      </section>
+    );
+  }
 
   return (
     <section className="relocationPanel">
@@ -548,63 +594,74 @@ export default function MigrationPlanner({
       </div>
 
       <div className="plannerWorkspace plannerWorkspaceStacked">
-        <div className="plannerMainGrid compactGrid">
-          <div className="plannerCard compactCard kzSyncCard">
-            <div className="cardTitleRow">
-              <div>
-                <h3>Казахстан · {monthLabel(plan.startMonth)}</h3>
-                <p>Точное отражение календарного прогноза дневника.</p>
-              </div>
-              <span className="readOnlyBadge">только чтение</span>
-            </div>
-
-            <div className="kzMonthTotals">
-              <div className="income"><span>Доходы</span><b>{fmt(startDiary.incomeTotal)}</b></div>
-              <div className="expense"><span>Расходы</span><b>{fmt(startDiary.expenseTotal)}</b></div>
-              <div><span>Остаток месяца</span><b className={startDiary.net < 0 ? "bad" : "ok"}>{fmt(startDiary.net)}</b></div>
-              <div><span>На конец месяца</span><b className={startEndBalance < 0 ? "bad" : "ok"}>{fmt(startEndBalance)}</b></div>
-            </div>
-
-            <div className="kzBreakdown compactBreakdown">
-              <div>
-                <h4>Доходы</h4>
-                {Object.entries(startDiary.incomeBy).filter(([, value]) => Number(value) !== 0).map(([name, value]) => (
-                  <div className="breakdownLine" key={`kzi-${name}`}><span>{name}</span><b>{fmt(value)}</b></div>
-                ))}
-                {Object.values(startDiary.incomeBy).every((value) => Number(value) === 0) && <div className="emptyMini">Нет доходов</div>}
-              </div>
-              <div>
-                <h4>Расходы</h4>
-                {Object.entries(startDiary.expenseBy).filter(([, value]) => Number(value) !== 0).map(([name, value]) => (
-                  <div className="breakdownLine" key={`kze-${name}`}><span>{name}</span><b>{fmt(value)}</b></div>
-                ))}
-                {Object.values(startDiary.expenseBy).every((value) => Number(value) === 0) && <div className="emptyMini">Нет расходов</div>}
-              </div>
-            </div>
-          </div>
-
-          <div className="plannerCard compactCard salaryCard">
-            <div className="cardTitleRow">
-              <div>
-                <h3>Германия · расчёт дохода</h3>
-                <p>Нетто автоматически подставляется в строки сценария.</p>
-              </div>
-            </div>
-            <div className="salaryGrid">
-              <label>Подработка gross, €<input type="number" value={plan.grossPartTime} onChange={(e) => updatePlan({ grossPartTime: Number(e.target.value || 0) })} /></label>
-              <label>Основная gross, €<input type="number" value={plan.grossMain} onChange={(e) => updatePlan({ grossMain: Number(e.target.value || 0) })} /></label>
-              <label>Доп. взнос KK<input type="number" step="0.001" value={plan.kkAdditional} onChange={(e) => updatePlan({ kkAdditional: Number(e.target.value || 0) })} /></label>
-              <label className="checkLine"><input type="checkbox" checked={plan.hasChildren} onChange={(e) => updatePlan({ hasChildren: e.target.checked })} /> есть дети</label>
-              <label className="checkLine"><input type="checkbox" checked={plan.churchTax} onChange={(e) => updatePlan({ churchTax: e.target.checked })} /> церковный налог</label>
-            </div>
-            <div className="salaryResults">
-              <div><span>Подработка netto</span><b>{fmt(partTimeNet.net, "EUR")}</b></div>
-              <div><span>Основная netto</span><b>{fmt(mainNet.net, "EUR")}</b></div>
-              <div><span>Удержания основной</span><b>{fmt(mainNet.deductions, "EUR")}</b></div>
-            </div>
-            <p className="smallWarn">Расчёт ориентировочный. Для точного сценария можно выбрать «ручная сумма» в нужной строке дохода.</p>
-          </div>
+        <div className="plannerInfoToggles">
+          <button type="button" className={`plannerInfoBtn ${showKzCard ? "active" : ""}`} onClick={() => setShowKzCard((v) => !v)}>
+            {showKzCard ? "Скрыть" : "Показать"} Казахстан
+          </button>
+          <button type="button" className={`plannerInfoBtn ${showSalaryCard ? "active" : ""}`} onClick={() => setShowSalaryCard((v) => !v)}>
+            {showSalaryCard ? "Скрыть" : "Показать"} расчёт дохода
+          </button>
         </div>
+
+        {(showKzCard || showSalaryCard) && (
+          <div className="plannerMainGrid compactGrid">
+            {showKzCard && <div className="plannerCard compactCard kzSyncCard">
+              <div className="cardTitleRow">
+                <div>
+                  <h3>Казахстан · {monthLabel(plan.startMonth)}</h3>
+                  <p>Точное отражение календарного прогноза дневника.</p>
+                </div>
+                <span className="readOnlyBadge">только чтение</span>
+              </div>
+
+              <div className="kzMonthTotals">
+                <div className="income"><span>Доходы</span><b>{fmt(startDiary.incomeTotal)}</b></div>
+                <div className="expense"><span>Расходы</span><b>{fmt(startDiary.expenseTotal)}</b></div>
+                <div><span>Остаток месяца</span><b className={startDiary.net < 0 ? "bad" : "ok"}>{fmt(startDiary.net)}</b></div>
+                <div><span>На конец месяца</span><b className={startEndBalance < 0 ? "bad" : "ok"}>{fmt(startEndBalance)}</b></div>
+              </div>
+
+              <div className="kzBreakdown compactBreakdown">
+                <div>
+                  <h4>Доходы</h4>
+                  {Object.entries(startDiary.incomeBy).filter(([, value]) => Number(value) !== 0).map(([name, value]) => (
+                    <div className="breakdownLine" key={`kzi-${name}`}><span>{name}</span><b>{fmt(value)}</b></div>
+                  ))}
+                  {Object.values(startDiary.incomeBy).every((value) => Number(value) === 0) && <div className="emptyMini">Нет доходов</div>}
+                </div>
+                <div>
+                  <h4>Расходы</h4>
+                  {Object.entries(startDiary.expenseBy).filter(([, value]) => Number(value) !== 0).map(([name, value]) => (
+                    <div className="breakdownLine" key={`kze-${name}`}><span>{name}</span><b>{fmt(value)}</b></div>
+                  ))}
+                  {Object.values(startDiary.expenseBy).every((value) => Number(value) === 0) && <div className="emptyMini">Нет расходов</div>}
+                </div>
+              </div>
+            </div>}
+
+            {showSalaryCard && <div className="plannerCard compactCard salaryCard">
+              <div className="cardTitleRow">
+                <div>
+                  <h3>Германия · расчёт дохода</h3>
+                  <p>Нетто автоматически подставляется в строки сценария.</p>
+                </div>
+              </div>
+              <div className="salaryGrid">
+                <label>Подработка gross, €<input type="number" min="0" value={plan.grossPartTime} onChange={(e) => updatePlan({ grossPartTime: Math.max(Number(e.target.value || 0), 0) })} /></label>
+                <label>Основная gross, €<input type="number" min="0" value={plan.grossMain} onChange={(e) => updatePlan({ grossMain: Math.max(Number(e.target.value || 0), 0) })} /></label>
+                <label>Доп. взнос KK<input type="number" min="0" step="0.001" value={plan.kkAdditional} onChange={(e) => updatePlan({ kkAdditional: Math.max(Number(e.target.value || 0), 0) })} /></label>
+                <label className="checkLine"><input type="checkbox" checked={plan.hasChildren} onChange={(e) => updatePlan({ hasChildren: e.target.checked })} /> есть дети</label>
+                <label className="checkLine"><input type="checkbox" checked={plan.churchTax} onChange={(e) => updatePlan({ churchTax: e.target.checked })} /> церковный налог</label>
+              </div>
+              <div className="salaryResults">
+                <div><span>Подработка netto</span><b>{fmt(partTimeNet.net, "EUR")}</b></div>
+                <div><span>Основная netto</span><b>{fmt(mainNet.net, "EUR")}</b></div>
+                <div><span>Удержания основной</span><b>{fmt(mainNet.deductions, "EUR")}</b></div>
+              </div>
+              <p className="smallWarn">Расчёт ориентировочный. Для точного сценария можно выбрать «ручная сумма» в нужной строке дохода.</p>
+            </div>}
+          </div>
+        )}
 
         <div className="forecastBlock">
         <div className="forecastHead">

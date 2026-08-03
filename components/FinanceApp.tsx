@@ -1,0 +1,1390 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { createClient } from "@/lib/supabase/browser";
+import MigrationPlanner from "@/components/MigrationPlanner";
+
+type Kind = "income" | "expense";
+type PaymentType = "regular" | "credit";
+type Frequency = "monthly" | "quarterly" | "halfyear" | "yearly";
+
+type Settings = {
+  user_id: string;
+  calc_start_month: string;
+  start_balance: number;
+  plan_income: number;
+  plan_other: number;
+  years: number;
+  currency: string;
+};
+
+type Category = {
+  id: string;
+  user_id: string;
+  name: string;
+  sort_order: number;
+};
+
+type Operation = {
+  id: string;
+  user_id: string;
+  op_date: string;
+  kind: Kind;
+  category_id: string | null;
+  title: string;
+  amount: number;
+  completed: boolean;
+  sort_order: number;
+  source_recurring_payment_id: string | null;
+  source_recurring_income_id: string | null;
+  source_month: string | null;
+};
+
+type RecurringPayment = {
+  id: string;
+  user_id: string;
+  title: string;
+  category_id: string | null;
+  amount: number;
+  due_day: number;
+  payment_type: PaymentType;
+  active: boolean;
+  total_months: number;
+  paid_months: number;
+  valid_from_month: string | null;
+  valid_to_month: string | null;
+  sort_order: number;
+};
+
+type RecurringIncome = {
+  id: string;
+  user_id: string;
+  title: string;
+  category_id: string | null;
+  amount: number;
+  due_day: number;
+  frequency: Frequency;
+  active: boolean;
+  valid_from_month: string | null;
+  valid_to_month: string | null;
+  sort_order: number;
+};
+
+type PaymentExclusion = {
+  user_id: string;
+  recurring_payment_id: string;
+  month: string;
+};
+
+type CollapsedGroup = {
+  user_id: string;
+  month: string;
+  category_key: string;
+  collapsed: boolean;
+};
+
+type VirtualOperation = Operation & {
+  virtual: true;
+  payment: RecurringPayment;
+};
+
+type AnyOperation = Operation | VirtualOperation;
+
+const supabase = createClient();
+
+const defaultExpenseCategories = [
+  "Квартира",
+  "Транспорт и связь",
+  "Подписки",
+  "Продукты",
+  "Здоровье",
+  "Одежда",
+  "Кошки",
+  "Другое"
+];
+
+const defaultIncomeCategories = ["Зарплата", "Аванс", "Премия", "Подработка", "Возврат", "Подарок", "Другое"];
+
+const freqMonths: Record<Frequency, number> = {
+  monthly: 1,
+  quarterly: 3,
+  halfyear: 6,
+  yearly: 12
+};
+
+const freqLabels: Record<Frequency, string> = {
+  monthly: "ежемес.",
+  quarterly: "квартал",
+  halfyear: "полгода",
+  yearly: "год"
+};
+
+function pad(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+function currentMonth() {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+}
+
+function monthIndex(m: string) {
+  const [y, mm] = String(m || currentMonth()).split("-").map(Number);
+  return y * 12 + (mm - 1);
+}
+
+function monthFromIndex(i: number) {
+  const y = Math.floor(i / 12);
+  const m = (i % 12) + 1;
+  return `${y}-${pad(m)}`;
+}
+
+function addMonths(m: string, n: number) {
+  return monthFromIndex(monthIndex(m) + n);
+}
+
+function monthLabel(m: string) {
+  const names = ["янв.", "февр.", "март", "апр.", "май", "июнь", "июль", "авг.", "сент.", "окт.", "нояб.", "дек."];
+  const [y, mm] = m.split("-").map(Number);
+  return `${names[(mm || 1) - 1]} ${String(y).slice(2)}`;
+}
+
+function monthLongLabel(m: string) {
+  const names = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
+  const [y, mm] = m.split("-").map(Number);
+  return `${names[(mm || 1) - 1]} ${y}`;
+}
+
+function daysInMonth(m: string) {
+  const [y, mm] = m.split("-").map(Number);
+  return new Date(y, mm, 0).getDate();
+}
+
+function dateForDay(month: string, day: number) {
+  const d = Math.min(Math.max(Number(day) || 1, 1), daysInMonth(month));
+  return `${month}-${pad(d)}`;
+}
+
+function inMonth(date: string, m: string) {
+  return String(date || "").slice(0, 7) === m;
+}
+
+function fmt(n: number, suffix = " ₸") {
+  return `${Math.round(Number(n || 0)).toLocaleString("ru-RU")}${suffix}`;
+}
+
+function full(n: number) {
+  const v = Math.round(Number(n || 0));
+  if (Object.is(v, -0)) return "0";
+  return v.toLocaleString("ru-RU");
+}
+
+function normalizeMonth(v: string | null | undefined) {
+  if (!v) return null;
+  return String(v).slice(0, 7);
+}
+
+function validInMonth(item: { valid_from_month?: string | null; valid_to_month?: string | null }, month: string) {
+  const from = normalizeMonth(item.valid_from_month);
+  const to = normalizeMonth(item.valid_to_month);
+  if (from && monthIndex(month) < monthIndex(from)) return false;
+  if (to && monthIndex(month) > monthIndex(to)) return false;
+  return true;
+}
+
+function creditRemaining(p: RecurringPayment) {
+  return Math.max(Number(p.total_months || 0) - Number(p.paid_months || 0), 0);
+}
+
+function categoryName(categories: Category[], id: string | null, fallback = "Другое") {
+  return categories.find((c) => c.id === id)?.name || fallback;
+}
+
+function isHiddenFromChecklist(payment: RecurringPayment, expenseCategories: Category[]) {
+  const group = categoryName(expenseCategories, payment.category_id, "").toLowerCase();
+  const title = String(payment.title || "").toLowerCase();
+  return (
+    payment.payment_type === "credit" ||
+    group.includes("кредит") ||
+    group.includes("рассроч") ||
+    group.includes("квартира") ||
+    title.includes("кредит") ||
+    title.includes("рассроч")
+  );
+}
+
+function paymentDue(payment: RecurringPayment, month: string, calcStart: string) {
+  if (!payment.active) return false;
+  if (!validInMonth(payment, month)) return false;
+
+  const startMonth = normalizeMonth(payment.valid_from_month) || calcStart;
+  const start = monthIndex(startMonth);
+  const cur = monthIndex(month);
+  if (cur < start) return false;
+
+  if (payment.payment_type === "credit") {
+    const left = creditRemaining(payment);
+    return left > 0 && cur < start + left;
+  }
+
+  return true;
+}
+
+function incomeDue(income: RecurringIncome, month: string, calcStart: string) {
+  if (!income.active) return false;
+  if (!validInMonth(income, month)) return false;
+
+  const startMonth = normalizeMonth(income.valid_from_month) || calcStart;
+  const start = monthIndex(startMonth);
+  const cur = monthIndex(month);
+  if (cur < start) return false;
+
+  const diff = cur - start;
+  return diff % (freqMonths[income.frequency] || 1) === 0;
+}
+
+function isUUID(value: unknown) {
+  return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function nextSortOrder(items: { sort_order: number }[]) {
+  return (Math.max(0, ...items.map((x) => Number(x.sort_order || 0))) + 10);
+}
+
+function clampDay(value: unknown) {
+  return Math.min(Math.max(Number(value || 1), 1), 31);
+}
+
+function cleanMonth(value: unknown) {
+  const text = typeof value === "string" ? value.slice(0, 7) : "";
+  return /^\d{4}-\d{2}$/.test(text) ? text : null;
+}
+
+function money(value: unknown) {
+  const n = Number(value || 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function pickLegacyState(input: any) {
+  return input?.state || input?.data || input?.financeDiary || input || {};
+}
+
+
+export default function FinanceApp({ userId, userEmail }: { userId: string; userEmail: string }) {
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("");
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const [expenseCategories, setExpenseCategories] = useState<Category[]>([]);
+  const [incomeCategories, setIncomeCategories] = useState<Category[]>([]);
+  const [operations, setOperations] = useState<Operation[]>([]);
+  const [payments, setPayments] = useState<RecurringPayment[]>([]);
+  const [incomes, setIncomes] = useState<RecurringIncome[]>([]);
+  const [exclusions, setExclusions] = useState<PaymentExclusion[]>([]);
+  const [collapsedGroups, setCollapsedGroups] = useState<CollapsedGroup[]>([]);
+
+  const [viewMonth, setViewMonthState] = useState(currentMonth());
+  const [opsPage, setOpsPage] = useState(1);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [mainTab, setMainTab] = useState<"diary" | "relocation">("diary");
+  const [settingsTab, setSettingsTab] = useState<"main" | "expenses" | "incomes" | "categories" | "import">("expenses");
+  const [opModalOpen, setOpModalOpen] = useState(false);
+  const [editingOperationId, setEditingOperationId] = useState<string | null>(null);
+  const [opForm, setOpForm] = useState({
+    op_date: `${currentMonth()}-01`,
+    kind: "expense" as Kind,
+    category_id: "",
+    title: "",
+    amount: ""
+  });
+
+  const calcStart = settings?.calc_start_month || currentMonth();
+
+  useEffect(() => {
+    loadAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function flash(text: string) {
+    setMessage(text);
+    window.setTimeout(() => setMessage(""), 3500);
+  }
+
+  async function signOut() {
+    await supabase.auth.signOut();
+    window.location.href = "/login";
+  }
+
+  function safeViewMonth(month: string, start = calcStart) {
+    return monthIndex(month) < monthIndex(start) ? start : month;
+  }
+
+  async function loadAll() {
+    setLoading(true);
+
+    let [{ data: settingsData }, { data: expenseData }, { data: incomeData }, { data: opData }, { data: payData }, { data: recIncomeData }, { data: exclData }, { data: collapsedData }] =
+      await Promise.all([
+        supabase.from("user_settings").select("*").eq("user_id", userId).maybeSingle(),
+        supabase.from("expense_categories").select("*").eq("user_id", userId).order("sort_order"),
+        supabase.from("income_categories").select("*").eq("user_id", userId).order("sort_order"),
+        supabase.from("operations").select("*").eq("user_id", userId).order("sort_order"),
+        supabase.from("recurring_payments").select("*").eq("user_id", userId).order("sort_order"),
+        supabase.from("recurring_incomes").select("*").eq("user_id", userId).order("sort_order"),
+        supabase.from("monthly_payment_exclusions").select("*").eq("user_id", userId),
+        supabase.from("collapsed_groups").select("*").eq("user_id", userId)
+      ]);
+
+    if (!settingsData) {
+      const start = currentMonth();
+      const insert = {
+        user_id: userId,
+        calc_start_month: start,
+        start_balance: 0,
+        plan_income: 0,
+        plan_other: 0,
+        years: 3,
+        currency: "KZT"
+      };
+      const { data } = await supabase.from("user_settings").insert(insert).select("*").single();
+      settingsData = data;
+    }
+
+    if (!expenseData?.length) {
+      const rows = defaultExpenseCategories.map((name, i) => ({ user_id: userId, name, sort_order: (i + 1) * 10 }));
+      const { data } = await supabase.from("expense_categories").insert(rows).select("*").order("sort_order");
+      expenseData = data || [];
+    }
+
+    if (!incomeData?.length) {
+      const rows = defaultIncomeCategories.map((name, i) => ({ user_id: userId, name, sort_order: (i + 1) * 10 }));
+      const { data } = await supabase.from("income_categories").insert(rows).select("*").order("sort_order");
+      incomeData = data || [];
+    }
+
+    setSettings({
+      ...settingsData,
+      start_balance: Number(settingsData?.start_balance || 0),
+      plan_income: Number(settingsData?.plan_income || 0),
+      plan_other: Number(settingsData?.plan_other || 0),
+      years: Number(settingsData?.years || 3)
+    });
+
+    setExpenseCategories((expenseData || []).map((x: any) => ({ ...x, sort_order: Number(x.sort_order || 0) })));
+    setIncomeCategories((incomeData || []).map((x: any) => ({ ...x, sort_order: Number(x.sort_order || 0) })));
+    setOperations((opData || []).map((x: any) => ({
+      ...x,
+      amount: Number(x.amount || 0),
+      sort_order: Number(x.sort_order || 0),
+      completed: !!x.completed
+    })));
+    setPayments((payData || []).map((x: any) => ({
+      ...x,
+      amount: Number(x.amount || 0),
+      due_day: Number(x.due_day || 1),
+      total_months: Number(x.total_months || 0),
+      paid_months: Number(x.paid_months || 0),
+      sort_order: Number(x.sort_order || 0)
+    })));
+    setIncomes((recIncomeData || []).map((x: any) => ({
+      ...x,
+      amount: Number(x.amount || 0),
+      due_day: Number(x.due_day || 1),
+      sort_order: Number(x.sort_order || 0)
+    })));
+    setExclusions(exclData || []);
+    setCollapsedGroups(collapsedData || []);
+
+    const start = settingsData?.calc_start_month || currentMonth();
+    setViewMonthState(safeViewMonth(viewMonth, start));
+    setLoading(false);
+  }
+
+  async function updateSettings(patch: Partial<Settings>) {
+    if (!settings) return;
+    const next = { ...settings, ...patch };
+    if (patch.calc_start_month) {
+      setViewMonthState(safeViewMonth(viewMonth, patch.calc_start_month));
+    }
+    setSettings(next);
+    const { error } = await supabase.from("user_settings").upsert({
+      user_id: userId,
+      calc_start_month: next.calc_start_month,
+      start_balance: Number(next.start_balance || 0),
+      plan_income: Number(next.plan_income || 0),
+      plan_other: Number(next.plan_other || 0),
+      years: Number(next.years || 3),
+      currency: next.currency || "KZT"
+    });
+    if (error) flash(error.message);
+  }
+
+  function setViewMonth(month: string) {
+    setViewMonthState(safeViewMonth(month));
+    setOpsPage(1);
+  }
+
+  const monthOptions = useMemo(() => {
+    const start = monthIndex(calcStart);
+    const end = Math.max(start + Number(settings?.years || 3) * 12 - 1, monthIndex(currentMonth()) + 24, monthIndex(viewMonth));
+    return Array.from({ length: end - start + 1 }, (_, i) => monthFromIndex(start + i));
+  }, [calcStart, settings?.years, viewMonth]);
+
+  function monthOps(month = viewMonth) {
+    return operations
+      .filter((o) => inMonth(o.op_date, month))
+      .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0) || String(a.op_date).localeCompare(String(b.op_date)));
+  }
+
+  function duePayments(month: string) {
+    return payments.filter((p) => paymentDue(p, month, calcStart));
+  }
+
+  function dueIncomes(month: string) {
+    return incomes.filter((i) => incomeDue(i, month, calcStart));
+  }
+
+  function isPaymentExcluded(paymentId: string, month: string) {
+    return exclusions.some((e) => e.recurring_payment_id === paymentId && e.month === month);
+  }
+
+  function plannedChecklistItems(month = viewMonth): VirtualOperation[] {
+    const real = monthOps(month);
+    const hasReal = new Set(real.filter((o) => o.source_recurring_payment_id).map((o) => o.source_recurring_payment_id));
+    return duePayments(month)
+      .filter((p) => !hasReal.has(p.id))
+      .filter((p) => !isHiddenFromChecklist(p, expenseCategories))
+      .map((p) => ({
+        id: `virtual:${p.id}:${month}`,
+        user_id: userId,
+        op_date: dateForDay(month, p.due_day),
+        kind: "expense" as Kind,
+        category_id: p.category_id,
+        title: p.title,
+        amount: Number(p.amount || 0),
+        completed: !isPaymentExcluded(p.id, month),
+        sort_order: Number(p.sort_order || 0),
+        source_recurring_payment_id: p.id,
+        source_recurring_income_id: null,
+        source_month: month,
+        virtual: true as const,
+        payment: p
+      }))
+      .sort((a, b) => String(a.op_date).localeCompare(String(b.op_date)));
+  }
+
+  function checklistOps(month = viewMonth): AnyOperation[] {
+    const real = monthOps(month);
+    const virtual = plannedChecklistItems(month);
+    const all: AnyOperation[] = [...real, ...virtual];
+    return all.sort((a, b) => {
+      const doneA = a.completed ? 1 : 0;
+      const doneB = b.completed ? 1 : 0;
+      if (doneA !== doneB) return doneA - doneB;
+      return Number(a.sort_order || 0) - Number(b.sort_order || 0) || String(a.op_date).localeCompare(String(b.op_date));
+    });
+  }
+
+  async function toggleVirtualPayment(item: VirtualOperation, checked: boolean) {
+    if (checked) {
+      await supabase
+        .from("monthly_payment_exclusions")
+        .delete()
+        .eq("user_id", userId)
+        .eq("recurring_payment_id", item.payment.id)
+        .eq("month", item.source_month);
+      setExclusions((prev) => prev.filter((e) => !(e.recurring_payment_id === item.payment.id && e.month === item.source_month)));
+    } else {
+      const row = { user_id: userId, recurring_payment_id: item.payment.id, month: item.source_month || viewMonth };
+      const { error } = await supabase.from("monthly_payment_exclusions").upsert(row);
+      if (error) flash(error.message);
+      setExclusions((prev) => {
+        if (prev.some((e) => e.recurring_payment_id === row.recurring_payment_id && e.month === row.month)) return prev;
+        return [...prev, row];
+      });
+    }
+  }
+
+  async function toggleOperation(op: Operation, completed: boolean) {
+    const patch = { completed };
+    const { error } = await supabase.from("operations").update(patch).eq("user_id", userId).eq("id", op.id);
+    if (error) {
+      flash(error.message);
+      return;
+    }
+    setOperations((prev) => prev.map((x) => (x.id === op.id ? { ...x, completed } : x)));
+  }
+
+  async function moveOperation(op: Operation, dir: -1 | 1) {
+    const real = monthOps(viewMonth).filter((x) => x.completed === op.completed);
+    const idx = real.findIndex((x) => x.id === op.id);
+    const next = idx + dir;
+    if (idx < 0 || next < 0 || next >= real.length) return;
+    const a = real[idx];
+    const b = real[next];
+    const aOrder = Number(a.sort_order || (idx + 1) * 10);
+    const bOrder = Number(b.sort_order || (next + 1) * 10);
+
+    await Promise.all([
+      supabase.from("operations").update({ sort_order: bOrder }).eq("user_id", userId).eq("id", a.id),
+      supabase.from("operations").update({ sort_order: aOrder }).eq("user_id", userId).eq("id", b.id)
+    ]);
+
+    setOperations((prev) => prev.map((x) => (x.id === a.id ? { ...x, sort_order: bOrder } : x.id === b.id ? { ...x, sort_order: aOrder } : x)));
+  }
+
+  function openNewOperation() {
+    setEditingOperationId(null);
+    setOpForm({
+      op_date: `${viewMonth}-01`,
+      kind: "expense",
+      category_id: expenseCategories[0]?.id || "",
+      title: "",
+      amount: ""
+    });
+    setOpModalOpen(true);
+  }
+
+  function openEditOperation(op: Operation) {
+    setEditingOperationId(op.id);
+    setOpForm({
+      op_date: op.op_date,
+      kind: op.kind,
+      category_id: op.category_id || "",
+      title: op.title || "",
+      amount: String(op.amount || "")
+    });
+    setOpModalOpen(true);
+  }
+
+  async function saveOperation(e: React.FormEvent) {
+    e.preventDefault();
+
+    const amount = Math.abs(Number(opForm.amount || 0));
+    if (!amount) {
+      flash("Введите сумму");
+      return;
+    }
+
+    const row = {
+      user_id: userId,
+      op_date: opForm.op_date || `${viewMonth}-01`,
+      kind: opForm.kind,
+      category_id: opForm.category_id || null,
+      title: opForm.title.trim() || "Операция",
+      amount,
+      completed: false,
+      sort_order: nextSortOrder(monthOps(String(opForm.op_date || `${viewMonth}-01`).slice(0, 7)))
+    };
+
+    if (editingOperationId) {
+      const { data, error } = await supabase.from("operations").update(row).eq("user_id", userId).eq("id", editingOperationId).select("*").single();
+      if (error) {
+        flash(error.message);
+        return;
+      }
+      setOperations((prev) => prev.map((x) => (x.id === editingOperationId ? { ...data, amount: Number(data.amount || 0) } : x)));
+    } else {
+      const { data, error } = await supabase.from("operations").insert(row).select("*").single();
+      if (error) {
+        flash(error.message);
+        return;
+      }
+      setOperations((prev) => [...prev, { ...data, amount: Number(data.amount || 0) }]);
+    }
+
+    setOpModalOpen(false);
+    setEditingOperationId(null);
+    setViewMonth(String(row.op_date).slice(0, 7));
+  }
+
+  async function deleteOperation(op: Operation) {
+    if (!confirm("Удалить операцию?")) return;
+    const { error } = await supabase.from("operations").delete().eq("user_id", userId).eq("id", op.id);
+    if (error) {
+      flash(error.message);
+      return;
+    }
+    setOperations((prev) => prev.filter((x) => x.id !== op.id));
+  }
+
+  function oneMonthPlan(month: string) {
+    const incomeBy: Record<string, number> = {};
+    const expenseBy: Record<string, number> = {};
+    incomeCategories.forEach((c) => (incomeBy[c.name] = 0));
+    expenseCategories.forEach((c) => (expenseBy[c.name] = 0));
+
+    const allOps = operations.filter((o) => inMonth(o.op_date, month));
+    const doneOps = allOps.filter((o) => o.completed);
+
+    const doneIncomeSource = new Set(doneOps.filter((o) => o.source_recurring_income_id).map((o) => o.source_recurring_income_id));
+    const donePaymentSource = new Set(doneOps.filter((o) => o.source_recurring_payment_id).map((o) => o.source_recurring_payment_id));
+    const uncheckedPaymentSource = new Set(allOps.filter((o) => o.source_recurring_payment_id && !o.completed).map((o) => o.source_recurring_payment_id));
+
+    dueIncomes(month).forEach((i) => {
+      if (doneIncomeSource.has(i.id)) return;
+      const name = categoryName(incomeCategories, i.category_id, "Доход");
+      incomeBy[name] = (incomeBy[name] || 0) + Number(i.amount || 0);
+    });
+
+    duePayments(month).forEach((p) => {
+      if (donePaymentSource.has(p.id)) return;
+      if (uncheckedPaymentSource.has(p.id)) return;
+      if (!isHiddenFromChecklist(p, expenseCategories) && isPaymentExcluded(p.id, month)) return;
+      const name = categoryName(expenseCategories, p.category_id, "Другое");
+      expenseBy[name] = (expenseBy[name] || 0) + Number(p.amount || 0);
+    });
+
+    doneOps.filter((o) => o.kind === "income").forEach((o) => {
+      const name = categoryName(incomeCategories, o.category_id, "Доход");
+      incomeBy[name] = (incomeBy[name] || 0) + Number(o.amount || 0);
+    });
+
+    doneOps.filter((o) => o.kind === "expense").forEach((o) => {
+      const name = categoryName(expenseCategories, o.category_id, "Другое");
+      expenseBy[name] = (expenseBy[name] || 0) + Number(o.amount || 0);
+    });
+
+    const incomeBeforeFallback = Object.values(incomeBy).reduce((a, b) => a + b, 0);
+    if (incomeBeforeFallback <= 0 && Number(settings?.plan_income || 0) > 0) {
+      incomeBy["Плановый доход"] = (incomeBy["Плановый доход"] || 0) + Number(settings?.plan_income || 0);
+    }
+
+    const expenseBeforeFallback = Object.values(expenseBy).reduce((a, b) => a + b, 0);
+    if (expenseBeforeFallback <= 0 && Number(settings?.plan_other || 0) > 0) {
+      expenseBy["План прочих расходов"] = (expenseBy["План прочих расходов"] || 0) + Number(settings?.plan_other || 0);
+    }
+
+    const incomeTotal = Object.values(incomeBy).reduce((a, b) => a + b, 0);
+    const expenseTotal = Object.values(expenseBy).reduce((a, b) => a + b, 0);
+
+    return { month, incomeBy, expenseBy, incomeTotal, expenseTotal, net: incomeTotal - expenseTotal };
+  }
+
+  function balanceBeforeMonth(month: string) {
+    let balance = Number(settings?.start_balance || 0);
+    for (let i = monthIndex(calcStart); i < monthIndex(month); i++) {
+      balance += oneMonthPlan(monthFromIndex(i)).net;
+    }
+    return balance;
+  }
+
+  function forecastData() {
+    const visibleStart = safeViewMonth(viewMonth);
+    const visibleMonths = Number(settings?.years || 3) * 12;
+    const first = monthIndex(calcStart);
+    const last = monthIndex(visibleStart) + visibleMonths - 1;
+
+    let balance = Number(settings?.start_balance || 0);
+    const rows: Array<ReturnType<typeof oneMonthPlan> & { balance: number }> = [];
+
+    for (let i = first; i <= last; i++) {
+      const month = monthFromIndex(i);
+      const plan = oneMonthPlan(month);
+      balance += plan.net;
+      if (i >= monthIndex(visibleStart)) rows.push({ ...plan, balance });
+    }
+
+    return rows;
+  }
+
+  const forecast = forecastData();
+  const selectedPlan = forecast[0] || oneMonthPlan(viewMonth);
+  const before = balanceBeforeMonth(viewMonth);
+
+  const opRows = checklistOps(viewMonth);
+  const doneCount = opRows.filter((o) => o.completed).length;
+  const pendingCount = opRows.length - doneCount;
+
+  const groupedDone = useMemo(() => {
+    const done = opRows.filter((o) => o.completed);
+    const map = new Map<string, { key: string; title: string; items: AnyOperation[] }>();
+
+    done.forEach((op) => {
+      const isIncome = op.kind === "income";
+      const title = isIncome ? categoryName(incomeCategories, op.category_id, "Доход") : categoryName(expenseCategories, op.category_id, "Другое");
+      const key = `${op.kind}:${op.category_id || title}`;
+      if (!map.has(key)) map.set(key, { key, title, items: [] });
+      map.get(key)!.items.push(op);
+    });
+
+    return [...map.values()].sort((a, b) => a.title.localeCompare(b.title, "ru"));
+  }, [opRows, expenseCategories, incomeCategories]);
+
+  const collapsedKeys = new Set(collapsedGroups.filter((g) => g.month === viewMonth && g.collapsed).map((g) => g.category_key));
+
+  const displayedRows = useMemo(() => {
+    const pending = opRows.filter((o) => !o.completed).map((op) => ({ type: "op" as const, op }));
+    const groups: Array<{ type: "group"; group: { key: string; title: string; items: AnyOperation[] } } | { type: "op"; op: AnyOperation }> = [];
+
+    groupedDone.forEach((group) => {
+      groups.push({ type: "group", group });
+      if (!collapsedKeys.has(group.key)) {
+        group.items.forEach((op) => groups.push({ type: "op", op }));
+      }
+    });
+
+    return [...pending, ...groups];
+  }, [opRows, groupedDone, collapsedGroups, viewMonth]);
+
+  const rowsPerPage = 12;
+  const totalPages = Math.max(1, Math.ceil(displayedRows.length / rowsPerPage));
+  const page = Math.min(opsPage, totalPages);
+  const pagedRows = displayedRows.slice((page - 1) * rowsPerPage, page * rowsPerPage);
+
+  async function toggleGroup(key: string) {
+    const isCollapsed = collapsedKeys.has(key);
+
+    if (isCollapsed) {
+      await supabase.from("collapsed_groups").delete().eq("user_id", userId).eq("month", viewMonth).eq("category_key", key);
+      setCollapsedGroups((prev) => prev.filter((x) => !(x.month === viewMonth && x.category_key === key)));
+      return;
+    }
+
+    const row = { user_id: userId, month: viewMonth, category_key: key, collapsed: true };
+    await supabase.from("collapsed_groups").upsert(row);
+    setCollapsedGroups((prev) => [...prev.filter((x) => !(x.month === viewMonth && x.category_key === key)), row]);
+  }
+
+  async function addCategory(kind: Kind) {
+    const name = prompt(kind === "expense" ? "Новая статья расходов" : "Новая статья доходов");
+    if (!name?.trim()) return;
+
+    const table = kind === "expense" ? "expense_categories" : "income_categories";
+    const list = kind === "expense" ? expenseCategories : incomeCategories;
+    const { data, error } = await supabase.from(table).insert({ user_id: userId, name: name.trim(), sort_order: nextSortOrder(list) }).select("*").single();
+
+    if (error) {
+      flash(error.message);
+      return;
+    }
+
+    if (kind === "expense") setExpenseCategories((prev) => [...prev, data]);
+    else setIncomeCategories((prev) => [...prev, data]);
+  }
+
+  async function updateCategory(kind: Kind, id: string, name: string) {
+    const table = kind === "expense" ? "expense_categories" : "income_categories";
+    const { error } = await supabase.from(table).update({ name }).eq("user_id", userId).eq("id", id);
+    if (error) flash(error.message);
+    if (kind === "expense") setExpenseCategories((prev) => prev.map((x) => (x.id === id ? { ...x, name } : x)));
+    else setIncomeCategories((prev) => prev.map((x) => (x.id === id ? { ...x, name } : x)));
+  }
+
+  async function addPayment() {
+    const row = {
+      user_id: userId,
+      title: "Новый платёж",
+      category_id: expenseCategories[0]?.id || null,
+      amount: 0,
+      due_day: 1,
+      payment_type: "regular",
+      active: true,
+      total_months: 0,
+      paid_months: 0,
+      valid_from_month: null,
+      valid_to_month: null,
+      sort_order: nextSortOrder(payments)
+    };
+    const { data, error } = await supabase.from("recurring_payments").insert(row).select("*").single();
+    if (error) flash(error.message);
+    else setPayments((prev) => [{ ...data, amount: Number(data.amount || 0) }, ...prev]);
+  }
+
+  async function updatePayment(id: string, patch: Partial<RecurringPayment>) {
+    setPayments((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+    const { error } = await supabase.from("recurring_payments").update(patch).eq("user_id", userId).eq("id", id);
+    if (error) flash(error.message);
+  }
+
+  async function deletePayment(id: string) {
+    if (!confirm("Удалить регулярный платёж?")) return;
+    const { error } = await supabase.from("recurring_payments").delete().eq("user_id", userId).eq("id", id);
+    if (error) flash(error.message);
+    else setPayments((prev) => prev.filter((x) => x.id !== id));
+  }
+
+  async function addIncome() {
+    const row = {
+      user_id: userId,
+      title: "Новый доход",
+      category_id: incomeCategories[0]?.id || null,
+      amount: 0,
+      due_day: 1,
+      frequency: "monthly",
+      active: true,
+      valid_from_month: null,
+      valid_to_month: null,
+      sort_order: nextSortOrder(incomes)
+    };
+    const { data, error } = await supabase.from("recurring_incomes").insert(row).select("*").single();
+    if (error) flash(error.message);
+    else setIncomes((prev) => [{ ...data, amount: Number(data.amount || 0) }, ...prev]);
+  }
+
+  async function updateIncome(id: string, patch: Partial<RecurringIncome>) {
+    setIncomes((prev) => prev.map((i) => (i.id === id ? { ...i, ...patch } : i)));
+    const { error } = await supabase.from("recurring_incomes").update(patch).eq("user_id", userId).eq("id", id);
+    if (error) flash(error.message);
+  }
+
+  async function deleteIncome(id: string) {
+    if (!confirm("Удалить регулярный доход?")) return;
+    const { error } = await supabase.from("recurring_incomes").delete().eq("user_id", userId).eq("id", id);
+    if (error) flash(error.message);
+    else setIncomes((prev) => prev.filter((x) => x.id !== id));
+  }
+
+  async function exportData() {
+    const payload = { settings, expenseCategories, incomeCategories, operations, payments, incomes, exclusions, collapsedGroups, exportedAt: new Date().toISOString() };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `finance-diary-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function importLegacy(file: File | null) {
+    if (!file) return;
+    if (!confirm("Импорт заменит текущие данные в базе. Продолжить?")) return;
+
+    const raw = await file.text();
+    let legacy: any;
+    try {
+      legacy = pickLegacyState(JSON.parse(raw));
+    } catch {
+      flash("Файл не похож на JSON");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // Deletes are sequential to avoid FK races during import.
+      await supabase.from("monthly_payment_exclusions").delete().eq("user_id", userId);
+      await supabase.from("collapsed_groups").delete().eq("user_id", userId);
+      await supabase.from("operations").delete().eq("user_id", userId);
+      await supabase.from("recurring_incomes").delete().eq("user_id", userId);
+      await supabase.from("recurring_payments").delete().eq("user_id", userId);
+      await supabase.from("income_categories").delete().eq("user_id", userId);
+      await supabase.from("expense_categories").delete().eq("user_id", userId);
+
+      const isSupabaseExport = Array.isArray(legacy.expenseCategories) || Array.isArray(legacy.incomeCategories) || Array.isArray(legacy.payments) || Array.isArray(legacy.incomes);
+
+      const groups = isSupabaseExport
+        ? (legacy.expenseCategories || []).map((c: any) => c.name).filter(Boolean)
+        : (Array.isArray(legacy.groups) && legacy.groups.length ? legacy.groups : defaultExpenseCategories);
+      const incomeTypes = isSupabaseExport
+        ? (legacy.incomeCategories || []).map((c: any) => c.name).filter(Boolean)
+        : (Array.isArray(legacy.incomeTypes) && legacy.incomeTypes.length ? legacy.incomeTypes : defaultIncomeCategories);
+
+      const { data: expCats, error: expErr } = await supabase
+        .from("expense_categories")
+        .insert((groups.length ? groups : defaultExpenseCategories).map((name: string, i: number) => ({ user_id: userId, name, sort_order: (i + 1) * 10 })))
+        .select("*");
+      if (expErr) throw expErr;
+
+      const { data: incCats, error: incErr } = await supabase
+        .from("income_categories")
+        .insert((incomeTypes.length ? incomeTypes : defaultIncomeCategories).map((name: string, i: number) => ({ user_id: userId, name, sort_order: (i + 1) * 10 })))
+        .select("*");
+      if (incErr) throw incErr;
+
+      const expenseMap = new Map((expCats || []).map((c: Category) => [c.name, c.id]));
+      const incomeMap = new Map((incCats || []).map((c: Category) => [c.name, c.id]));
+      const oldExpenseIdToNew = new Map((legacy.expenseCategories || []).map((c: any) => [String(c.id), expenseMap.get(c.name)]));
+      const oldIncomeIdToNew = new Map((legacy.incomeCategories || []).map((c: any) => [String(c.id), incomeMap.get(c.name)]));
+
+      const calcStart = legacy.settings?.calc_start_month || legacy.calcStartMonth || legacy.calc_start_month || legacy.month || currentMonth();
+      const { error: settingsErr } = await supabase.from("user_settings").upsert({
+        user_id: userId,
+        calc_start_month: calcStart,
+        start_balance: money(legacy.settings?.start_balance ?? legacy.startBalance ?? legacy.start_balance),
+        plan_income: money(legacy.settings?.plan_income ?? legacy.planIncome ?? legacy.plan_income),
+        plan_other: money(legacy.settings?.plan_other ?? legacy.planOther ?? legacy.plan_other),
+        years: Number(legacy.settings?.years || legacy.years || 3),
+        currency: legacy.settings?.currency || "KZT"
+      });
+      if (settingsErr) throw settingsErr;
+
+      const scheduleMap = new Map<string, string>();
+      const incomeSourceMap = new Map<string, string>();
+
+      const sourcePayments = isSupabaseExport ? (legacy.payments || []) : (legacy.schedules || legacy.regulars || []);
+      const paymentRows = sourcePayments.map((s: any, i: number) => {
+        const id = crypto.randomUUID();
+        if (s.id) scheduleMap.set(String(s.id), id);
+        const categoryNameFromOld = s.group || s.category || (legacy.expenseCategories || []).find((c: any) => c.id === s.category_id)?.name || "Другое";
+        return {
+          id,
+          user_id: userId,
+          title: s.title || "Платёж",
+          category_id: oldExpenseIdToNew.get(String(s.category_id)) || expenseMap.get(categoryNameFromOld) || expCats?.[0]?.id || null,
+          amount: money(s.amount),
+          due_day: clampDay(s.due_day ?? s.day ?? s.dueDay ?? s.payDay),
+          payment_type: (s.payment_type || s.type) === "credit" ? "credit" : "regular",
+          active: s.active !== false,
+          total_months: Number(s.total_months ?? s.totalMonths ?? s.repeatMonths ?? s.creditMonths ?? 0),
+          paid_months: Number(s.paid_months ?? s.paidMonths ?? s.paid ?? 0),
+          valid_from_month: cleanMonth(s.valid_from_month ?? s.validFrom ?? s.startMonth),
+          valid_to_month: cleanMonth(s.valid_to_month ?? s.validTo),
+          sort_order: Number(s.sort_order ?? s.order ?? (i + 1) * 10)
+        };
+      });
+      if (paymentRows.length) {
+        const { error } = await supabase.from("recurring_payments").insert(paymentRows);
+        if (error) throw error;
+      }
+
+      const sourceIncomes = isSupabaseExport ? (legacy.incomes || []) : (legacy.recurringIncomes || []);
+      const incomeRows = sourceIncomes.map((r: any, i: number) => {
+        const id = crypto.randomUUID();
+        if (r.id) incomeSourceMap.set(String(r.id), id);
+        const categoryNameFromOld = r.category || r.type || (legacy.incomeCategories || []).find((c: any) => c.id === r.category_id)?.name || "Зарплата";
+        const freq = r.frequency || r.freq || "monthly";
+        return {
+          id,
+          user_id: userId,
+          title: r.title || "Доход",
+          category_id: oldIncomeIdToNew.get(String(r.category_id)) || incomeMap.get(categoryNameFromOld) || incCats?.[0]?.id || null,
+          amount: money(r.amount),
+          due_day: clampDay(r.due_day ?? r.day),
+          frequency: freqMonths[freq as Frequency] ? freq : "monthly",
+          active: r.active !== false,
+          valid_from_month: cleanMonth(r.valid_from_month ?? r.validFrom ?? r.startMonth),
+          valid_to_month: cleanMonth(r.valid_to_month ?? r.validTo),
+          sort_order: Number(r.sort_order ?? r.order ?? (i + 1) * 10)
+        };
+      });
+      if (incomeRows.length) {
+        const { error } = await supabase.from("recurring_incomes").insert(incomeRows);
+        if (error) throw error;
+      }
+
+      const sourceOps = legacy.operations || legacy.ops || [];
+      const opRows = sourceOps.map((o: any, i: number) => {
+        const kind = o.kind === "income" ? "income" : "expense";
+        const categoryTitle = o.category || (kind === "income"
+          ? (legacy.incomeCategories || []).find((c: any) => c.id === o.category_id)?.name
+          : (legacy.expenseCategories || []).find((c: any) => c.id === o.category_id)?.name);
+        return {
+          user_id: userId,
+          op_date: o.op_date || o.date || `${calcStart}-01`,
+          kind,
+          category_id: kind === "income"
+            ? oldIncomeIdToNew.get(String(o.category_id)) || incomeMap.get(categoryTitle || "Доход") || incCats?.[0]?.id || null
+            : oldExpenseIdToNew.get(String(o.category_id)) || expenseMap.get(categoryTitle || "Другое") || expCats?.[0]?.id || null,
+          title: o.title || categoryTitle || "Операция",
+          amount: money(o.amount),
+          completed: o.completed !== undefined ? !!o.completed : true,
+          sort_order: Number(o.sort_order ?? o.order ?? (i + 1) * 10),
+          source_recurring_payment_id: o.source_recurring_payment_id ? scheduleMap.get(String(o.source_recurring_payment_id)) || null : (o.sourceScheduleId ? scheduleMap.get(String(o.sourceScheduleId)) || null : null),
+          source_recurring_income_id: o.source_recurring_income_id ? incomeSourceMap.get(String(o.source_recurring_income_id)) || null : (o.sourceRecurringIncomeId ? incomeSourceMap.get(String(o.sourceRecurringIncomeId)) || null : null),
+          source_month: o.source_month || o.sourceMonth || null
+        };
+      });
+      if (opRows.length) {
+        const { error } = await supabase.from("operations").insert(opRows);
+        if (error) throw error;
+      }
+
+      const exclusionRows: any[] = [];
+      const oldExclusions = legacy.scheduleExclusions || {};
+      Object.keys(oldExclusions).forEach((key) => {
+        const [oldId, month] = key.split("__");
+        const newId = scheduleMap.get(oldId);
+        if (newId && month) exclusionRows.push({ user_id: userId, recurring_payment_id: newId, month });
+      });
+      (legacy.exclusions || []).forEach((e: any) => {
+        const newId = scheduleMap.get(String(e.recurring_payment_id));
+        if (newId && e.month) exclusionRows.push({ user_id: userId, recurring_payment_id: newId, month: e.month });
+      });
+      if (exclusionRows.length) {
+        const { error } = await supabase.from("monthly_payment_exclusions").upsert(exclusionRows);
+        if (error) throw error;
+      }
+
+      const collapsedRows = (legacy.collapsedGroups || []).map((g: any) => ({
+        user_id: userId,
+        month: g.month,
+        category_key: g.category_key,
+        collapsed: g.collapsed !== false
+      })).filter((g: any) => g.month && g.category_key);
+      if (collapsedRows.length) await supabase.from("collapsed_groups").upsert(collapsedRows);
+
+      await loadAll();
+      setViewMonth(calcStart);
+      flash("Импорт завершён");
+    } catch (error: any) {
+      flash(error?.message || "Импорт не завершён");
+      setLoading(false);
+    }
+  }
+
+  const incomeRowNames = useMemo(() => {
+    const names = new Set<string>();
+    forecast.forEach((m) => Object.entries(m.incomeBy).forEach(([k, v]) => Number(v) !== 0 && names.add(k)));
+    return [...names];
+  }, [forecast]);
+
+  const expenseRowNames = useMemo(() => {
+    const names = new Set<string>();
+    forecast.forEach((m) => Object.entries(m.expenseBy).forEach(([k, v]) => Number(v) !== 0 && names.add(k)));
+    return [...names];
+  }, [forecast]);
+
+  if (loading || !settings) {
+    return <main className="loading">Загрузка дневника…</main>;
+  }
+
+  return (
+    <main id="stage">
+      <div id="app">
+        <header className="slimbar">
+          <div className="brand">
+            <div className="mark">₸</div>
+            <div>
+              <div className="slim-title">Финансовый дневник</div>
+              <div className="slim-sub">
+                расчёт с <span>{monthLongLabel(calcStart)}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="month-line">
+            <button className="btn month-btn" disabled={monthIndex(viewMonth) <= monthIndex(calcStart)} onClick={() => setViewMonth(addMonths(viewMonth, -1))}>
+              ←
+            </button>
+            <select className="month-inline" value={viewMonth} onChange={(e) => setViewMonth(e.target.value)}>
+              {monthOptions.map((m) => (
+                <option key={m} value={m}>
+                  {monthLongLabel(m)}
+                </option>
+              ))}
+            </select>
+            <button className="btn month-btn current" onClick={() => setViewMonth(currentMonth())}>
+              текущий
+            </button>
+            <button className="btn month-btn" onClick={() => setViewMonth(addMonths(viewMonth, 1))}>
+              →
+            </button>
+          </div>
+        </header>
+
+        {message && <div className="toast">{message}</div>}
+
+        <nav className="mainTabs">
+          <button className={`mainTab ${mainTab === "diary" ? "active" : ""}`} onClick={() => setMainTab("diary")}>
+            Дневник
+          </button>
+          <button className={`mainTab ${mainTab === "relocation" ? "active" : ""}`} onClick={() => setMainTab("relocation")}>
+            Переезд / мультивалюта
+          </button>
+        </nav>
+
+        {mainTab === "diary" && (
+          <>
+        <section className="summaryGrid">
+          <div className="summaryCard">
+            <b>{fmt(before)}</b>
+            <span>на начало месяца</span>
+          </div>
+          <div className="summaryCard income">
+            <b>{fmt(selectedPlan.incomeTotal)}</b>
+            <span>доходы месяца</span>
+          </div>
+          <div className="summaryCard expense">
+            <b>{fmt(selectedPlan.expenseTotal)}</b>
+            <span>расходы месяца</span>
+          </div>
+          <div className="summaryCard">
+            <b>{fmt(forecast[0]?.balance || 0)}</b>
+            <span>на конец месяца</span>
+          </div>
+        </section>
+
+        <section className="workspace">
+          <section className="panel">
+            <div className="panel-head">
+              <div>
+                <h2>Дневник операций</h2>
+                <span className="hint">{doneCount} факт · {pendingCount} план</span>
+              </div>
+              <div className="panel-tools">
+                <button className="btn blue" onClick={openNewOperation}>+ операция</button>
+              </div>
+            </div>
+
+            <div className="tablebox">
+              <div className="thead">
+                <div>✓</div>
+                <div>Дата</div>
+                <div>Тип</div>
+                <div>Статья</div>
+                <div>Комментарий</div>
+                <div>Сумма</div>
+                <div></div>
+              </div>
+
+              <div className="tbody">
+                {pagedRows.length === 0 && <div className="empty">Пока нет операций за выбранный месяц.</div>}
+
+                {pagedRows.map((row, idx) => {
+                  if (row.type === "group") {
+                    const income = row.group.items.filter((x) => x.kind === "income").reduce((s, x) => s + Number(x.amount || 0), 0);
+                    const expense = row.group.items.filter((x) => x.kind === "expense").reduce((s, x) => s + Number(x.amount || 0), 0);
+                    const sumText = income > 0 && expense > 0 ? `+${fmt(income)} / −${fmt(expense)}` : income > 0 ? `+${fmt(income)}` : `−${fmt(expense)}`;
+                    const collapsed = collapsedKeys.has(row.group.key);
+                    return (
+                      <div className={`opgroup ${collapsed ? "collapsed" : ""}`} key={`group-${row.group.key}`} onClick={() => toggleGroup(row.group.key)}>
+                        <button className="groupToggle">{collapsed ? "▸" : "▾"}</button>
+                        <div className="groupTitle">{row.group.title}</div>
+                        <div className="groupMeta">{row.group.items.length} поз. · {sumText}</div>
+                      </div>
+                    );
+                  }
+
+                  const op = row.op;
+                  const real = !("virtual" in op);
+                  const cat = op.kind === "income" ? categoryName(incomeCategories, op.category_id, "Доход") : categoryName(expenseCategories, op.category_id, "Другое");
+                  return (
+                    <div className={`oprow ${op.kind} ${op.completed ? "done" : "pending"} ${"virtual" in op ? "virtual" : ""}`} key={`${op.id}-${idx}`}>
+                      <label className="checkcell">
+                        <input
+                          type="checkbox"
+                          checked={op.completed}
+                          onChange={(e) => {
+                            if ("virtual" in op) toggleVirtualPayment(op, e.target.checked);
+                            else toggleOperation(op, e.target.checked);
+                          }}
+                        />
+                        <span />
+                      </label>
+                      <div className="cell dateCell">{op.op_date.slice(8, 10)}.{op.op_date.slice(5, 7)}</div>
+                      <div><span className={`tag ${op.kind}`}>{op.kind === "income" ? "Доход" : "Расход"}</span></div>
+                      <div className="cell categoryCell">{cat}</div>
+                      <div className="cell commentCell">
+                        <span>{op.title}</span>
+                        <b className={`statusBadge ${op.completed ? "fact" : "plan"}`}>{op.completed ? "факт" : "план"}</b>
+                        <em>{"virtual" in op ? "рег. платёж" : op.source_recurring_payment_id || op.source_recurring_income_id ? "план" : "ручн."}</em>
+                      </div>
+                      <div className={`amount ${op.kind}`}>{op.kind === "income" ? "+" : "−"}{fmt(op.amount)}</div>
+                      <div className="rowactions">
+                        {real ? (
+                          <>
+                            <button className="movebtn" onClick={() => moveOperation(op as Operation, -1)}>↑</button>
+                            <button className="movebtn" onClick={() => moveOperation(op as Operation, 1)}>↓</button>
+                            <button className="edit" onClick={() => openEditOperation(op as Operation)}>✎</button>
+                            <button className="delete" onClick={() => deleteOperation(op as Operation)}>×</button>
+                          </>
+                        ) : (
+                          <span className="virtualLock">настр.</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="pager">
+                <button className="btn" disabled={page <= 1} onClick={() => setOpsPage(page - 1)}>←</button>
+                <span>{page} / {totalPages}</span>
+                <button className="btn" disabled={page >= totalPages} onClick={() => setOpsPage(page + 1)}>→</button>
+              </div>
+            </div>
+          </section>
+
+          <section className="panel">
+            <div className="panel-head">
+              <div>
+                <h2>Календарный прогноз</h2>
+                <span className="hint">с {monthLabel(calcStart)} · показано {forecast.length} мес.</span>
+              </div>
+            </div>
+
+            <div className="matrixbox">
+              <table className="matrix">
+                <thead>
+                  <tr>
+                    <th className="corner">Показатель</th>
+                    {forecast.map((m) => <th key={`y-${m.month}`} className="year">{m.month.slice(0, 4)}</th>)}
+                  </tr>
+                  <tr>
+                    <th className="corner sub">Месяц</th>
+                    {forecast.map((m) => <th key={`m-${m.month}`} className="month">{monthLabel(m.month)}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="strong"><th className="rowhead">Остаток месяца</th>{forecast.map((m) => <td key={`net-${m.month}`}>{full(m.net)}</td>)}</tr>
+                  <tr className="strong"><th className="rowhead">Накопительно</th>{forecast.map((m) => <td key={`bal-${m.month}`}>{full(m.balance)}</td>)}</tr>
+                  <tr className="section"><th className="rowhead">Доходы</th>{forecast.map((m) => <td key={`inc-${m.month}`}>{full(m.incomeTotal)}</td>)}</tr>
+                  {incomeRowNames.map((name) => (
+                    <tr key={`incrow-${name}`}>
+                      <th className="rowhead light">{name}</th>
+                      {forecast.map((m) => <td key={`${name}-${m.month}`}>{full(m.incomeBy[name] || 0)}</td>)}
+                    </tr>
+                  ))}
+                  <tr className="section"><th className="rowhead">Расходы</th>{forecast.map((m) => <td key={`exp-${m.month}`}>{full(m.expenseTotal)}</td>)}</tr>
+                  {expenseRowNames.map((name) => (
+                    <tr key={`exprow-${name}`}>
+                      <th className="rowhead light">{name}</th>
+                      {forecast.map((m) => <td key={`${name}-${m.month}`}>{full(m.expenseBy[name] || 0)}</td>)}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+          </>
+        )}
+
+        {mainTab === "relocation" && <MigrationPlanner userId={userId} />}
+
+        <button className="settings-fab" onClick={() => setSettingsOpen(true)}>⚙</button>
+        <button className="logoutBtn" onClick={signOut}>выйти</button>
+      </div>
+
+      {opModalOpen && (
+        <div className="modal show">
+          <form className="modal-card compact" onSubmit={saveOperation}>
+            <div className="modal-head">
+              <h3>{editingOperationId ? "Редактировать операцию" : "Новая операция"}</h3>
+              <button type="button" onClick={() => setOpModalOpen(false)}>×</button>
+            </div>
+
+            <div className="formgrid">
+              <label>Дата<input type="date" value={opForm.op_date} onChange={(e) => setOpForm({ ...opForm, op_date: e.target.value })} /></label>
+              <label>Тип
+                <select value={opForm.kind} onChange={(e) => {
+                  const kind = e.target.value as Kind;
+                  setOpForm({ ...opForm, kind, category_id: kind === "income" ? incomeCategories[0]?.id || "" : expenseCategories[0]?.id || "" });
+                }}>
+                  <option value="expense">Расход</option>
+                  <option value="income">Доход</option>
+                </select>
+              </label>
+              <label>Статья
+                <select value={opForm.category_id} onChange={(e) => setOpForm({ ...opForm, category_id: e.target.value })}>
+                  {(opForm.kind === "income" ? incomeCategories : expenseCategories).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </label>
+              <label>Сумма<input type="number" value={opForm.amount} onChange={(e) => setOpForm({ ...opForm, amount: e.target.value })} /></label>
+              <label className="wide">Комментарий<input value={opForm.title} onChange={(e) => setOpForm({ ...opForm, title: e.target.value })} /></label>
+            </div>
+
+            <div className="modal-actions">
+              <button type="button" className="btn" onClick={() => setOpModalOpen(false)}>Отмена</button>
+              <button className="btn blue" type="submit">Сохранить</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {settingsOpen && (
+        <div className="modal show">
+          <div className="modal-card settingsModal">
+            <div className="modal-head">
+              <h3>Настройки</h3>
+              <button onClick={() => setSettingsOpen(false)}>×</button>
+            </div>
+
+            <div className="tabs">
+              <button className={settingsTab === "main" ? "active" : ""} onClick={() => setSettingsTab("main")}>Параметры</button>
+              <button className={settingsTab === "expenses" ? "active" : ""} onClick={() => setSettingsTab("expenses")}>Платежи</button>
+              <button className={settingsTab === "incomes" ? "active" : ""} onClick={() => setSettingsTab("incomes")}>Доходы</button>
+              <button className={settingsTab === "categories" ? "active" : ""} onClick={() => setSettingsTab("categories")}>Статьи</button>
+              <button className={settingsTab === "import" ? "active" : ""} onClick={() => setSettingsTab("import")}>Импорт</button>
+            </div>
+
+            {settingsTab === "main" && (
+              <div className="settingsGrid">
+                <label>Считать с месяца<input type="month" value={settings.calc_start_month} onChange={(e) => updateSettings({ calc_start_month: e.target.value || currentMonth() })} /></label>
+                <label>Стартовый остаток<input type="number" value={settings.start_balance} onChange={(e) => updateSettings({ start_balance: Number(e.target.value || 0) })} /></label>
+                <label>План дохода, если доходы не заведены<input type="number" value={settings.plan_income} onChange={(e) => updateSettings({ plan_income: Number(e.target.value || 0) })} /></label>
+                <label>План расходов, если расходов нет<input type="number" value={settings.plan_other} onChange={(e) => updateSettings({ plan_other: Number(e.target.value || 0) })} /></label>
+                <label>Горизонт, лет<input type="number" min="1" max="10" value={settings.years} onChange={(e) => updateSettings({ years: Number(e.target.value || 3) })} /></label>
+              </div>
+            )}
+
+            {settingsTab === "expenses" && (
+              <div className="settingsList">
+                <button className="btn blue" onClick={addPayment}>+ регулярный платёж</button>
+                {payments.map((p) => (
+                  <div className="setrow pay" key={p.id}>
+                    <input value={p.title} onChange={(e) => updatePayment(p.id, { title: e.target.value })} />
+                    <select value={p.category_id || ""} onChange={(e) => updatePayment(p.id, { category_id: e.target.value || null })}>
+                      {expenseCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                    <input type="number" value={p.amount} onChange={(e) => updatePayment(p.id, { amount: Number(e.target.value || 0) })} />
+                    <select value={p.payment_type} onChange={(e) => updatePayment(p.id, { payment_type: e.target.value as PaymentType })}>
+                      <option value="regular">регуляр.</option>
+                      <option value="credit">кредит</option>
+                    </select>
+                    <input type="month" value={p.valid_from_month || ""} onChange={(e) => updatePayment(p.id, { valid_from_month: e.target.value || null })} title="Действует с. Пусто = без ограничения" />
+                    <input type="month" value={p.valid_to_month || ""} onChange={(e) => updatePayment(p.id, { valid_to_month: e.target.value || null })} title="Действует до. Пусто = без ограничения" />
+                    <input type="number" min="1" max="31" value={p.due_day} onChange={(e) => updatePayment(p.id, { due_day: Number(e.target.value || 1) })} />
+                    <input type="number" value={p.total_months} onChange={(e) => updatePayment(p.id, { total_months: Number(e.target.value || 0) })} title="Всего месяцев для кредита" />
+                    <input type="number" value={p.paid_months} onChange={(e) => updatePayment(p.id, { paid_months: Number(e.target.value || 0) })} title="Уже оплачено для кредита" />
+                    <button type="button" className={`mini ${p.active ? "on" : ""}`} onClick={() => updatePayment(p.id, { active: !p.active })}>{p.active ? "on" : "off"}</button>
+                    <button type="button" className="delete" onClick={() => deletePayment(p.id)}>×</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {settingsTab === "incomes" && (
+              <div className="settingsList">
+                <button className="btn blue" onClick={addIncome}>+ регулярный доход</button>
+                {incomes.map((i) => (
+                  <div className="setrow income" key={i.id}>
+                    <input value={i.title} onChange={(e) => updateIncome(i.id, { title: e.target.value })} />
+                    <select value={i.category_id || ""} onChange={(e) => updateIncome(i.id, { category_id: e.target.value || null })}>
+                      {incomeCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                    <input type="number" value={i.amount} onChange={(e) => updateIncome(i.id, { amount: Number(e.target.value || 0) })} />
+                    <input type="number" min="1" max="31" value={i.due_day} onChange={(e) => updateIncome(i.id, { due_day: Number(e.target.value || 1) })} />
+                    <select value={i.frequency} onChange={(e) => updateIncome(i.id, { frequency: e.target.value as Frequency })}>
+                      {Object.entries(freqLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                    </select>
+                    <input type="month" value={i.valid_from_month || ""} onChange={(e) => updateIncome(i.id, { valid_from_month: e.target.value || null })} title="Действует с. Пусто = без ограничения" />
+                    <input type="month" value={i.valid_to_month || ""} onChange={(e) => updateIncome(i.id, { valid_to_month: e.target.value || null })} title="Действует до. Пусто = без ограничения" />
+                    <button type="button" className={`mini ${i.active ? "on" : ""}`} onClick={() => updateIncome(i.id, { active: !i.active })}>{i.active ? "on" : "off"}</button>
+                    <button type="button" className="delete" onClick={() => deleteIncome(i.id)}>×</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {settingsTab === "categories" && (
+              <div className="categorySettings">
+                <div>
+                  <h4>Расходы</h4>
+                  <button className="btn" onClick={() => addCategory("expense")}>+ статья</button>
+                  {expenseCategories.map((c) => <input key={c.id} value={c.name} onChange={(e) => updateCategory("expense", c.id, e.target.value)} />)}
+                </div>
+                <div>
+                  <h4>Доходы</h4>
+                  <button className="btn" onClick={() => addCategory("income")}>+ статья</button>
+                  {incomeCategories.map((c) => <input key={c.id} value={c.name} onChange={(e) => updateCategory("income", c.id, e.target.value)} />)}
+                </div>
+              </div>
+            )}
+
+            {settingsTab === "import" && (
+              <div className="importBox">
+                <button type="button" className="btn" onClick={exportData}>Экспорт текущей базы</button>
+                <label className="fileImport">
+                  Импорт из старого HTML / JSON
+                  <input type="file" accept="application/json,.json" onChange={(e) => importLegacy(e.target.files?.[0] || null)} />
+                </label>
+                <p>Импорт заменяет текущие данные. Перед импортом лучше сделать экспорт базы.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </main>
+  );
+}

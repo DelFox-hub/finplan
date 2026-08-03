@@ -37,38 +37,54 @@ function currentParts() {
 export default function MonthPicker({ value, onChange, min, max, nullable = false, className = "" }: MonthPickerProps) {
   const parsed = parseMonth(value);
   const current = currentParts();
-  const minYear = cleanMonth(min) ? Number(String(min).slice(0, 4)) : Math.min(Number(current.year) - 6, parsed.year ? Number(parsed.year) : Number(current.year) - 6);
-  const maxYear = cleanMonth(max) ? Number(String(max).slice(0, 4)) : Math.max(Number(current.year) + 8, parsed.year ? Number(parsed.year) : Number(current.year) + 8);
+  const cleanMin = cleanMonth(min);
+  const cleanMax = cleanMonth(max);
+
+  const selectedYear = parsed.year ? Number(parsed.year) : Number(current.year);
+  const minYear = cleanMin ? Number(cleanMin.slice(0, 4)) : Math.min(Number(current.year) - 15, selectedYear);
+  const maxYear = cleanMax ? Number(cleanMax.slice(0, 4)) : Math.max(Number(current.year) + 20, selectedYear);
 
   const years: number[] = [];
-  for (let y = minYear; y <= maxYear; y += 1) years.push(y);
+  for (let year = minYear; year <= maxYear; year += 1) years.push(year);
 
   const yearValue = parsed.year || (nullable ? "" : current.year);
   const monthValue = parsed.month || (nullable ? "" : current.month);
+
+  function clampToRange(month: string) {
+    if (cleanMin && month < cleanMin) return cleanMin;
+    if (cleanMax && month > cleanMax) return cleanMax;
+    return month;
+  }
 
   function emit(nextYear: string, nextMonth: string) {
     if (!nextYear || !nextMonth) {
       if (nullable) onChange(null);
       return;
     }
-    onChange(`${nextYear}-${pad(Number(nextMonth))}`);
+    onChange(clampToRange(`${nextYear}-${pad(Number(nextMonth))}`));
+  }
+
+  function monthDisabled(monthNumber: number) {
+    if (!yearValue) return false;
+    const candidate = `${yearValue}-${pad(monthNumber)}`;
+    return Boolean((cleanMin && candidate < cleanMin) || (cleanMax && candidate > cleanMax));
   }
 
   return (
     <div className={`monthPicker ${className}`.trim()}>
       <select
         value={monthValue}
-        onChange={(e) => emit(yearValue || current.year, e.target.value)}
+        onChange={(event) => emit(yearValue || current.year, event.target.value)}
         aria-label="Месяц"
       >
         {nullable && <option value="">мес.</option>}
         {MONTH_OPTIONS.map((label, index) => (
-          <option key={label} value={index + 1}>{label}</option>
+          <option key={label} value={index + 1} disabled={monthDisabled(index + 1)}>{label}</option>
         ))}
       </select>
       <select
         value={yearValue}
-        onChange={(e) => emit(e.target.value, monthValue || current.month)}
+        onChange={(event) => emit(event.target.value, monthValue || current.month)}
         aria-label="Год"
       >
         {nullable && <option value="">год</option>}

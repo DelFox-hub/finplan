@@ -682,7 +682,7 @@ export default function MigrationPlanner({
                     <div className="periodEditor">
                       <MonthPicker value={row.startMonth} onChange={(value) => updateRow(row.id, { startMonth: value || row.startMonth })} />
                       <span>—</span>
-                      <MonthPicker value={row.endMonth} onChange={(value) => updateRow(row.id, { endMonth: value || row.endMonth })} />
+                      <MonthPicker className="periodEndPicker" value={row.endMonth} min={row.startMonth} nullable onChange={(value) => updateRow(row.id, { endMonth: value || "" })} />
                     </div>
                   </td>
                   <td><input value={row.group} onChange={(e) => updateRow(row.id, { group: e.target.value })} /></td>

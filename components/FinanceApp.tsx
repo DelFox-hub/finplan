@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 import MigrationPlanner from "@/components/MigrationPlanner";
 import MonthPicker from "@/components/MonthPicker";
@@ -195,30 +195,16 @@ function validInMonth(item: { valid_from_month?: string | null; valid_to_month?:
   return true;
 }
 
-function creditRemaining(p: RecurringPayment) {
-  return Math.max(Number(p.total_months || 0) - Number(p.paid_months || 0), 0);
+function creditDuration(p: RecurringPayment) {
+  return Math.max(Number(p.total_months || 0), 0);
 }
 
 function categoryName(categories: Category[], id: string | null, fallback = "Другое") {
   return categories.find((c) => c.id === id)?.name || fallback;
 }
 
-function isHiddenFromChecklist(payment: RecurringPayment, expenseCategories: Category[]) {
-  const group = categoryName(expenseCategories, payment.category_id, "").toLowerCase();
-  const title = String(payment.title || "").toLowerCase();
-  return (
-    payment.payment_type === "credit" ||
-    group.includes("кредит") ||
-    group.includes("рассроч") ||
-    group.includes("квартира") ||
-    title.includes("кредит") ||
-    title.includes("рассроч")
-  );
-}
-
 function paymentDue(payment: RecurringPayment, month: string, calcStart: string) {
   if (!payment.active) return false;
-  if (!validInMonth(payment, month)) return false;
 
   const startMonth = normalizeMonth(payment.valid_from_month) || calcStart;
   const start = monthIndex(startMonth);
@@ -226,11 +212,13 @@ function paymentDue(payment: RecurringPayment, month: string, calcStart: string)
   if (cur < start) return false;
 
   if (payment.payment_type === "credit") {
-    const left = creditRemaining(payment);
-    return left > 0 && cur < start + left;
+    // У кредитов нет отдельного поля «До»: конец всегда считается от месяца
+    // начала и общей длительности. Скрытое старое valid_to_month не учитывается.
+    const duration = creditDuration(payment);
+    return duration > 0 && cur < start + duration;
   }
 
-  return true;
+  return validInMonth(payment, month);
 }
 
 function incomeDue(income: RecurringIncome, month: string, calcStart: string) {
@@ -284,7 +272,6 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
   const [incomes, setIncomes] = useState<RecurringIncome[]>([]);
   const [exclusions, setExclusions] = useState<PaymentExclusion[]>([]);
   const [collapsedGroups, setCollapsedGroups] = useState<CollapsedGroup[]>([]);
-  const autoAppliedMonthsRef = useRef("");
 
   const [viewMonth, setViewMonthState] = useState(currentMonth());
   const [opsPage, setOpsPage] = useState(1);
@@ -370,6 +357,27 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
       const rows = defaultIncomeCategories.map((name, i) => ({ user_id: userId, name, sort_order: (i + 1) * 10 }));
       const { data } = await supabase.from("income_categories").insert(rows).select("*").order("sort_order");
       incomeData = data || [];
+    }
+
+    // Старые версии приложения сохраняли регулярные платежи как отдельные операции.
+    // Теперь настройки являются единственным источником истины, поэтому такие копии
+    // удаляются: иначе они дают пустые галочки, дубли и устаревшие суммы.
+    const materializedPaymentOps = (opData || []).filter((x: any) => x.source_recurring_payment_id);
+    if (materializedPaymentOps.length) {
+      for (let i = 0; i < materializedPaymentOps.length; i += 200) {
+        const ids = materializedPaymentOps.slice(i, i + 200).map((x: any) => x.id);
+        await supabase.from("operations").delete().eq("user_id", userId).in("id", ids);
+      }
+      opData = (opData || []).filter((x: any) => !x.source_recurring_payment_id);
+    }
+
+    // Поле «До» у кредитов удалено из интерфейса. Очищаем старые значения,
+    // чтобы скрытая дата больше не могла обрезать кредитный график.
+    const creditsWithLegacyEnd = (payData || []).filter((x: any) => x.payment_type === "credit" && x.valid_to_month);
+    if (creditsWithLegacyEnd.length) {
+      const ids = creditsWithLegacyEnd.map((x: any) => x.id);
+      await supabase.from("recurring_payments").update({ valid_to_month: null }).eq("user_id", userId).in("id", ids);
+      payData = (payData || []).map((x: any) => x.payment_type === "credit" ? { ...x, valid_to_month: null } : x);
     }
 
     const legacyStart = settingsData?.calc_start_month || currentMonth();
@@ -472,79 +480,6 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
     setOpsPage(1);
   }
 
-  useEffect(() => {
-    if (!settings || !payments.length) return;
-
-    const current = currentMonth();
-    const syncKey = [
-      userId,
-      payments.length,
-      operations.length,
-      exclusions.length,
-      diaryStart,
-      current
-    ].join("|");
-
-    if (autoAppliedMonthsRef.current === syncKey) return;
-    autoAppliedMonthsRef.current = syncKey;
-
-    let cancelled = false;
-
-    async function autoApplyPastPayments() {
-      const from = monthIndex(diaryStart);
-      const to = monthIndex(current) - 1;
-      if (to < from) return;
-
-      const existingKeys = new Set(
-        operations
-          .filter((o) => o.source_recurring_payment_id)
-          .map((o) => `${o.source_recurring_payment_id}:${String(o.op_date).slice(0, 7)}`)
-      );
-
-      const excludedKeys = new Set(exclusions.map((e) => `${e.recurring_payment_id}:${e.month}`));
-      const toInsert: Omit<Operation, "id">[] = [];
-
-      payments.forEach((payment) => {
-        for (let i = from; i <= to; i += 1) {
-          const month = monthFromIndex(i);
-          const key = `${payment.id}:${month}`;
-          if (existingKeys.has(key)) continue;
-          if (excludedKeys.has(key)) continue;
-          if (!paymentDue(payment, month, calcStart)) continue;
-
-          toInsert.push({
-            user_id: userId,
-            op_date: dateForDay(month, payment.due_day),
-            kind: "expense",
-            category_id: payment.category_id,
-            title: payment.title,
-            amount: Number(payment.amount || 0),
-            completed: true,
-            sort_order: Number(payment.sort_order || 0),
-            source_recurring_payment_id: payment.id,
-            source_recurring_income_id: null,
-            source_month: month
-          });
-        }
-      });
-
-      if (!toInsert.length) return;
-
-      const { data, error } = await supabase.from("operations").insert(toInsert).select("*");
-      if (cancelled) return;
-      if (error) {
-        flash(error.message);
-        return;
-      }
-      setOperations((prev) => [...prev, ...((data || []).map((row) => ({ ...row, amount: Number(row.amount || 0) }))) ]);
-    }
-
-    autoApplyPastPayments();
-    return () => {
-      cancelled = true;
-    };
-  }, [settings, payments, operations, exclusions, diaryStart, calcStart, userId]);
-
   function monthOps(month = viewMonth) {
     return operations
       .filter((o) => inMonth(o.op_date, month))
@@ -559,20 +494,12 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
     return incomes.filter((i) => incomeDue(i, month, calcStart));
   }
 
-  function isPastMonth(month: string) {
-    return monthIndex(month) < monthIndex(currentMonth());
-  }
-
   function isPaymentExcluded(paymentId: string, month: string) {
     return exclusions.some((e) => e.recurring_payment_id === paymentId && e.month === month);
   }
 
   function plannedChecklistItems(month = viewMonth): VirtualOperation[] {
-    const real = monthOps(month);
-    const hasReal = new Set(real.filter((o) => o.source_recurring_payment_id).map((o) => o.source_recurring_payment_id));
     return duePayments(month)
-      .filter((p) => !hasReal.has(p.id))
-      .filter((p) => !isHiddenFromChecklist(p, expenseCategories))
       .map((p) => ({
         id: `virtual:${p.id}:${month}`,
         user_id: userId,
@@ -581,7 +508,7 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
         category_id: p.category_id,
         title: p.title,
         amount: Number(p.amount || 0),
-        completed: isPastMonth(month) && !isPaymentExcluded(p.id, month),
+        completed: !isPaymentExcluded(p.id, month),
         sort_order: Number(p.sort_order || 0),
         source_recurring_payment_id: p.id,
         source_recurring_income_id: null,
@@ -593,7 +520,9 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
   }
 
   function checklistOps(month = viewMonth): AnyOperation[] {
-    const real = monthOps(month);
+    // Платежи из настроек всегда строятся из актуальных настроек как виртуальные строки.
+    // Старые материализованные копии скрываются, чтобы не было дублей и устаревших сумм.
+    const real = monthOps(month).filter((o) => !o.source_recurring_payment_id);
     const virtual = plannedChecklistItems(month);
     const all: AnyOperation[] = [...real, ...virtual];
     return all.sort((a, b) => {
@@ -608,44 +537,30 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
     const sourceMonth = item.source_month || viewMonth;
 
     if (checked) {
-      if (isPastMonth(sourceMonth)) {
-        await supabase
-          .from("monthly_payment_exclusions")
-          .delete()
-          .eq("user_id", userId)
-          .eq("recurring_payment_id", item.payment.id)
-          .eq("month", sourceMonth);
-        setExclusions((prev) => prev.filter((e) => !(e.recurring_payment_id === item.payment.id && e.month === sourceMonth)));
-        return;
-      }
-
-      const row = {
-        user_id: userId,
-        op_date: dateForDay(sourceMonth, item.payment.due_day),
-        kind: "expense" as Kind,
-        category_id: item.payment.category_id,
-        title: item.payment.title,
-        amount: Number(item.payment.amount || 0),
-        completed: true,
-        source_recurring_payment_id: item.payment.id,
-        source_recurring_income_id: null,
-        sort_order: Number(item.payment.sort_order || 0)
-      };
-      const { data, error } = await supabase.from("operations").insert(row).select("*").single();
+      const { error } = await supabase
+        .from("monthly_payment_exclusions")
+        .delete()
+        .eq("user_id", userId)
+        .eq("recurring_payment_id", item.payment.id)
+        .eq("month", sourceMonth);
       if (error) {
         flash(error.message);
         return;
       }
-      setOperations((prev) => [...prev, { ...data, amount: Number(data.amount || 0) }]);
-    } else {
-      const row = { user_id: userId, recurring_payment_id: item.payment.id, month: sourceMonth };
-      const { error } = await supabase.from("monthly_payment_exclusions").upsert(row);
-      if (error) flash(error.message);
-      setExclusions((prev) => {
-        if (prev.some((e) => e.recurring_payment_id === row.recurring_payment_id && e.month === row.month)) return prev;
-        return [...prev, row];
-      });
+      setExclusions((prev) => prev.filter((e) => !(e.recurring_payment_id === item.payment.id && e.month === sourceMonth)));
+      return;
     }
+
+    const row = { user_id: userId, recurring_payment_id: item.payment.id, month: sourceMonth };
+    const { error } = await supabase.from("monthly_payment_exclusions").upsert(row);
+    if (error) {
+      flash(error.message);
+      return;
+    }
+    setExclusions((prev) => {
+      if (prev.some((e) => e.recurring_payment_id === row.recurring_payment_id && e.month === row.month)) return prev;
+      return [...prev, row];
+    });
   }
 
   async function toggleOperation(op: Operation, completed: boolean) {
@@ -761,8 +676,6 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
     const doneOps = allOps.filter((o) => o.completed);
 
     const doneIncomeSource = new Set(doneOps.filter((o) => o.source_recurring_income_id).map((o) => o.source_recurring_income_id));
-    const donePaymentSource = new Set(doneOps.filter((o) => o.source_recurring_payment_id).map((o) => o.source_recurring_payment_id));
-    const uncheckedPaymentSource = new Set(allOps.filter((o) => o.source_recurring_payment_id && !o.completed).map((o) => o.source_recurring_payment_id));
 
     dueIncomes(month).forEach((i) => {
       if (doneIncomeSource.has(i.id)) return;
@@ -770,10 +683,10 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
       incomeBy[name] = (incomeBy[name] || 0) + Number(i.amount || 0);
     });
 
+    // Платежи из настроек считаются по самой настройке. Старая операция-копия
+    // не влияет на итог, поэтому изменение суммы/статьи сразу отражается в прогнозе.
     duePayments(month).forEach((p) => {
-      if (donePaymentSource.has(p.id)) return;
-      if (uncheckedPaymentSource.has(p.id)) return;
-      if (!isHiddenFromChecklist(p, expenseCategories) && isPaymentExcluded(p.id, month)) return;
+      if (isPaymentExcluded(p.id, month)) return;
       const name = categoryName(expenseCategories, p.category_id, "Другое");
       expenseBy[name] = (expenseBy[name] || 0) + Number(p.amount || 0);
     });
@@ -783,7 +696,7 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
       incomeBy[name] = (incomeBy[name] || 0) + Number(o.amount || 0);
     });
 
-    doneOps.filter((o) => o.kind === "expense").forEach((o) => {
+    doneOps.filter((o) => o.kind === "expense" && !o.source_recurring_payment_id).forEach((o) => {
       const name = categoryName(expenseCategories, o.category_id, "Другое");
       expenseBy[name] = (expenseBy[name] || 0) + Number(o.amount || 0);
     });
@@ -1003,12 +916,17 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
   async function deletePayment(id: string) {
     if (!confirm("Удалить регулярный платёж?")) return;
     beginSave("Удаление строки…");
+
+    // Сначала удаляем копии, созданные старыми версиями приложения.
+    await supabase.from("operations").delete().eq("user_id", userId).eq("source_recurring_payment_id", id);
     const { error } = await supabase.from("recurring_payments").delete().eq("user_id", userId).eq("id", id);
     if (error) {
       failSave(`Ошибка сохранения: ${error.message}`);
       flash(error.message);
     } else {
       setPayments((prev) => prev.filter((x) => x.id !== id));
+      setOperations((prev) => prev.filter((x) => x.source_recurring_payment_id !== id));
+      setExclusions((prev) => prev.filter((x) => x.recurring_payment_id !== id));
       finishSave("Строка удалена");
     }
   }
@@ -1400,7 +1318,7 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
                       <div className="cell commentCell">
                         <span>{op.title}</span>
                         <b className={`statusBadge ${op.completed ? "fact" : "plan"}`}>{op.completed ? "факт" : "план"}</b>
-                        <em>{"virtual" in op ? "рег. платёж" : op.source_recurring_payment_id || op.source_recurring_income_id ? "план" : "ручн."}</em>
+                        <em>{op.source_recurring_payment_id ? "рег. платёж" : op.source_recurring_income_id ? "рег. доход" : "ручн."}</em>
                       </div>
                       <div className={`amount ${op.kind}`}>{op.kind === "income" ? "+" : "−"}{fmt(op.amount)}</div>
                       <div className="rowactions">

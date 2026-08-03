@@ -12,6 +12,8 @@ type Frequency = "monthly" | "quarterly" | "halfyear" | "yearly";
 type Settings = {
   user_id: string;
   calc_start_month: string;
+  diary_start_month: string;
+  forecast_start_month: string;
   start_balance: number;
   plan_income: number;
   plan_other: number;
@@ -302,7 +304,9 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
     amount: ""
   });
 
-  const calcStart = settings?.calc_start_month || currentMonth();
+  const diaryStart = settings?.diary_start_month || settings?.calc_start_month || currentMonth();
+  const forecastStart = settings?.forecast_start_month || settings?.calc_start_month || currentMonth();
+  const calcStart = monthFromIndex(Math.min(monthIndex(diaryStart), monthIndex(forecastStart)));
 
   useEffect(() => {
     loadAll();
@@ -319,7 +323,7 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
     window.location.href = "/login";
   }
 
-  function safeViewMonth(month: string, start = calcStart) {
+  function safeViewMonth(month: string, start = diaryStart) {
     return monthIndex(month) < monthIndex(start) ? start : month;
   }
 
@@ -343,6 +347,8 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
       const insert = {
         user_id: userId,
         calc_start_month: start,
+        diary_start_month: start,
+        forecast_start_month: start,
         start_balance: 0,
         plan_income: 0,
         plan_other: 0,
@@ -365,8 +371,16 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
       incomeData = data || [];
     }
 
+    const legacyStart = settingsData?.calc_start_month || currentMonth();
+    const loadedDiaryStart = settingsData?.diary_start_month || legacyStart;
+    const loadedForecastStart = settingsData?.forecast_start_month || legacyStart;
+    const loadedCalcStart = monthFromIndex(Math.min(monthIndex(loadedDiaryStart), monthIndex(loadedForecastStart)));
+
     setSettings({
       ...settingsData,
+      calc_start_month: loadedCalcStart,
+      diary_start_month: loadedDiaryStart,
+      forecast_start_month: loadedForecastStart,
       start_balance: Number(settingsData?.start_balance || 0),
       plan_income: Number(settingsData?.plan_income || 0),
       plan_other: Number(settingsData?.plan_other || 0),
@@ -398,8 +412,7 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
     setExclusions(exclData || []);
     setCollapsedGroups(collapsedData || []);
 
-    const start = settingsData?.calc_start_month || currentMonth();
-    setViewMonthState(safeViewMonth(viewMonth, start));
+    setViewMonthState(safeViewMonth(viewMonth, loadedDiaryStart));
     setLoading(false);
   }
 
@@ -417,15 +430,28 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
 
   async function updateSettings(patch: Partial<Settings>) {
     if (!settings) return;
-    const next = { ...settings, ...patch };
-    if (patch.calc_start_month) {
-      setViewMonthState(safeViewMonth(viewMonth, patch.calc_start_month));
+    const patched = { ...settings, ...patch };
+    const nextDiaryStart = patched.diary_start_month || patched.calc_start_month || currentMonth();
+    const nextForecastStart = patched.forecast_start_month || patched.calc_start_month || currentMonth();
+    const nextCalcStart = monthFromIndex(Math.min(monthIndex(nextDiaryStart), monthIndex(nextForecastStart)));
+    const next: Settings = {
+      ...patched,
+      diary_start_month: nextDiaryStart,
+      forecast_start_month: nextForecastStart,
+      calc_start_month: nextCalcStart
+    };
+
+    if (patch.diary_start_month) {
+      setViewMonthState(safeViewMonth(viewMonth, nextDiaryStart));
     }
+
     setSettings(next);
     beginSave();
     const { error } = await supabase.from("user_settings").upsert({
       user_id: userId,
       calc_start_month: next.calc_start_month,
+      diary_start_month: next.diary_start_month,
+      forecast_start_month: next.forecast_start_month,
       start_balance: Number(next.start_balance || 0),
       plan_income: Number(next.plan_income || 0),
       plan_other: Number(next.plan_other || 0),
@@ -446,10 +472,10 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
   }
 
   const monthOptions = useMemo(() => {
-    const start = monthIndex(calcStart);
+    const start = monthIndex(diaryStart);
     const end = Math.max(start + Number(settings?.years || 3) * 12 - 1, monthIndex(currentMonth()) + 24, monthIndex(viewMonth));
     return Array.from({ length: end - start + 1 }, (_, i) => monthFromIndex(start + i));
-  }, [calcStart, settings?.years, viewMonth]);
+  }, [diaryStart, settings?.years, viewMonth]);
 
   function monthOps(month = viewMonth) {
     return operations
@@ -691,7 +717,7 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
   }
 
   function forecastData() {
-    const visibleStart = safeViewMonth(viewMonth);
+    const visibleStart = forecastStart;
     const visibleMonths = Number(settings?.years || 3) * 12;
     const first = monthIndex(calcStart);
     const last = monthIndex(visibleStart) + visibleMonths - 1;
@@ -710,8 +736,9 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
   }
 
   const forecast = forecastData();
-  const selectedPlan = forecast[0] || oneMonthPlan(viewMonth);
+  const selectedPlan = oneMonthPlan(viewMonth);
   const before = balanceBeforeMonth(viewMonth);
+  const selectedEndBalance = before + selectedPlan.net;
 
   const opRows = checklistOps(viewMonth);
   const doneCount = opRows.filter((o) => o.completed).length;
@@ -1001,10 +1028,15 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
       const oldExpenseIdToNew = new Map((legacy.expenseCategories || []).map((c: any) => [String(c.id), expenseMap.get(c.name)]));
       const oldIncomeIdToNew = new Map((legacy.incomeCategories || []).map((c: any) => [String(c.id), incomeMap.get(c.name)]));
 
-      const calcStart = legacy.settings?.calc_start_month || legacy.calcStartMonth || legacy.calc_start_month || legacy.month || currentMonth();
+      const legacyStart = legacy.settings?.calc_start_month || legacy.calcStartMonth || legacy.calc_start_month || legacy.month || currentMonth();
+      const importedDiaryStart = legacy.settings?.diary_start_month || legacy.diaryStartMonth || legacyStart;
+      const importedForecastStart = legacy.settings?.forecast_start_month || legacy.forecastStartMonth || legacyStart;
+      const importedCalcStart = monthFromIndex(Math.min(monthIndex(importedDiaryStart), monthIndex(importedForecastStart)));
       const { error: settingsErr } = await supabase.from("user_settings").upsert({
         user_id: userId,
-        calc_start_month: calcStart,
+        calc_start_month: importedCalcStart,
+        diary_start_month: importedDiaryStart,
+        forecast_start_month: importedForecastStart,
         start_balance: money(legacy.settings?.start_balance ?? legacy.startBalance ?? legacy.start_balance),
         plan_income: money(legacy.settings?.plan_income ?? legacy.planIncome ?? legacy.plan_income),
         plan_other: money(legacy.settings?.plan_other ?? legacy.planOther ?? legacy.plan_other),
@@ -1119,7 +1151,7 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
       if (collapsedRows.length) await supabase.from("collapsed_groups").upsert(collapsedRows);
 
       await loadAll();
-      setViewMonth(calcStart);
+      setViewMonthState(importedDiaryStart);
       flash("Импорт завершён");
     } catch (error: any) {
       flash(error?.message || "Импорт не завершён");
@@ -1155,7 +1187,7 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
             <div>
               <div className="slim-title">Финансовый дневник</div>
               <div className="slim-sub">
-                расчёт с <span>{monthLongLabel(calcStart)}</span>
+                дневник с <span>{monthLongLabel(diaryStart)}</span> · прогноз с <span>{monthLongLabel(forecastStart)}</span>
               </div>
             </div>
           </div>
@@ -1170,7 +1202,7 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
           </nav>
 
           <div className="month-line">
-            <button className="btn month-btn" disabled={monthIndex(viewMonth) <= monthIndex(calcStart)} onClick={() => setViewMonth(addMonths(viewMonth, -1))}>
+            <button className="btn month-btn" disabled={monthIndex(viewMonth) <= monthIndex(diaryStart)} onClick={() => setViewMonth(addMonths(viewMonth, -1))}>
               ←
             </button>
             <select className="month-inline" value={viewMonth} onChange={(e) => setViewMonth(e.target.value)}>
@@ -1206,8 +1238,8 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
             <b>{fmt(selectedPlan.expenseTotal)}</b>
             <span>расходы месяца</span>
           </div>
-          <div className={`summaryCard ${(forecast[0]?.balance || 0) < 0 ? "negative" : ""}`}>
-            <b>{fmt(forecast[0]?.balance || 0)}</b>
+          <div className={`summaryCard ${selectedEndBalance < 0 ? "negative" : ""}`}>
+            <b>{fmt(selectedEndBalance)}</b>
             <span>на конец месяца</span>
           </div>
         </section>
@@ -1303,12 +1335,16 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
             </div>
           </section>
 
-          <section className="panel">
-            <div className="panel-head">
+          <section className="panel forecastPanel">
+            <div className="panel-head forecastPanelHead">
               <div>
                 <h2>Календарный прогноз</h2>
-                <span className="hint">с {monthLabel(calcStart)} · показано {forecast.length} мес.</span>
+                <span className="hint">независимо от выбранного месяца дневника · показано {forecast.length} мес.</span>
               </div>
+              <label className="forecastStartControl">
+                <span>Показывать с</span>
+                <MonthPicker value={forecastStart} onChange={(value) => updateSettings({ forecast_start_month: value || currentMonth() })} />
+              </label>
             </div>
 
             <div className="matrixbox">
@@ -1433,11 +1469,12 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
                     <div className="settingsSectionHead">
                       <div>
                         <h4>Основные параметры</h4>
-                        <p>Эти значения задают начало и длину календарного прогноза.</p>
+                        <p>Дневник и календарный прогноз имеют независимые периоды просмотра.</p>
                       </div>
                     </div>
                     <div className="settingsGrid settingsGridCards">
-                      <label>Считать с месяца<MonthPicker value={settings.calc_start_month} onChange={(value) => updateSettings({ calc_start_month: value || currentMonth() })} /></label>
+                      <label>Дневник операций — показывать с<MonthPicker value={diaryStart} onChange={(value) => updateSettings({ diary_start_month: value || currentMonth() })} /><span>Это нижняя граница переключения месяцев в дневнике.</span></label>
+                      <label>Календарный прогноз — показывать с<MonthPicker value={forecastStart} onChange={(value) => updateSettings({ forecast_start_month: value || currentMonth() })} /><span>Прогноз начинается с этого месяца и не зависит от дневника.</span></label>
                       <label>Стартовый остаток<input type="number" value={settings.start_balance} onChange={(e) => updateSettings({ start_balance: Number(e.target.value || 0) })} /></label>
                       <label>Резервный план дохода<input type="number" value={settings.plan_income} onChange={(e) => updateSettings({ plan_income: Number(e.target.value || 0) })} /><span>Используется только когда регулярные доходы не заведены.</span></label>
                       <label>Резервный план расходов<input type="number" value={settings.plan_other} onChange={(e) => updateSettings({ plan_other: Number(e.target.value || 0) })} /><span>Используется только когда регулярные расходы не заведены.</span></label>

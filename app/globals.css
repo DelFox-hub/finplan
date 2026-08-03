@@ -342,6 +342,31 @@ select {
   gap: 6px;
 }
 
+
+.forecastStartControl {
+  display: grid;
+  grid-template-columns: auto 190px;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.forecastStartControl .monthPicker {
+  grid-template-columns: minmax(0, 1fr) 72px 0;
+}
+
+.forecastStartControl .monthPickerStub {
+  display: none;
+}
+
+.forecastStartControl .monthPicker select {
+  height: 30px;
+  font-size: 11px;
+}
+
 .tablebox {
   min-height: 0;
   display: grid;
@@ -1430,6 +1455,18 @@ select {
     grid-template-columns: 1fr 1fr;
   }
 
+  .forecastPanelHead {
+    min-height: 74px;
+    padding: 8px 12px;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .forecastStartControl {
+    width: 100%;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
   .thead,
   .oprow {
     grid-template-columns: 30px 50px 42px 74px minmax(96px, 1fr) 72px 44px;
@@ -2206,4 +2243,14 @@ select {
 
 @media (max-width: 760px) {
   .monthPicker { grid-template-columns: minmax(0, 1fr) 68px 22px; }
+}
+
+.forecastPanel {
+  grid-template-rows: 58px minmax(0, 1fr);
+}
+
+@media (max-width: 760px) {
+  .forecastPanel {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
 }

@@ -32,6 +32,8 @@ $$;
 create table if not exists public.user_settings (
   user_id uuid primary key references auth.users(id) on delete cascade,
   calc_start_month text not null,
+  diary_start_month text not null,
+  forecast_start_month text not null,
   start_balance numeric(14,2) not null default 0,
   plan_income numeric(14,2) not null default 0,
   plan_other numeric(14,2) not null default 0,

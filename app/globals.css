@@ -142,11 +142,11 @@ select {
 
 .slimbar {
   display: grid;
-  grid-template-columns: minmax(230px, 1fr) auto;
+  grid-template-columns: minmax(220px, 1fr) auto auto;
   align-items: center;
   gap: 12px;
-  min-height: 58px;
-  padding: 10px 14px;
+  min-height: 60px;
+  padding: 10px 18px;
   border-radius: 22px;
   background: linear-gradient(135deg, #1e3a8a, #172033);
   color: #fff;
@@ -179,6 +179,25 @@ select {
   display: flex;
   align-items: center;
   gap: 7px;
+}
+
+
+.headerTabs {
+  justify-self: center;
+  align-self: center;
+  overflow: visible;
+}
+
+.headerTabs .mainTab {
+  background: rgba(255, 255, 255, .14);
+  color: rgba(255, 255, 255, .78);
+  border-color: rgba(255, 255, 255, .18);
+}
+
+.headerTabs .mainTab.active {
+  background: #fff;
+  color: #172033;
+  border-color: #fff;
 }
 
 .month-inline {
@@ -1252,6 +1271,22 @@ select {
   }
 }
 
+@media (max-width: 1180px) {
+  .slimbar {
+    grid-template-columns: minmax(220px, 1fr) auto;
+  }
+
+  .headerTabs {
+    justify-self: end;
+    grid-column: 1 / -1;
+    order: 3;
+  }
+
+  .month-line {
+    justify-self: end;
+  }
+}
+
 @media (max-width: 1100px) {
   .workspace {
     grid-template-columns: 1fr;
@@ -1270,6 +1305,12 @@ select {
   .slimbar {
     grid-template-columns: 1fr;
     gap: 9px;
+    padding: 11px 16px;
+  }
+
+  .headerTabs {
+    justify-self: start;
+    width: 100%;
   }
 
   .month-line {
@@ -1388,6 +1429,7 @@ select {
   display: flex;
   gap: 8px;
   overflow: auto;
+  align-items: center;
 }
 
 .mainTab {

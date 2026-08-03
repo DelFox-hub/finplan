@@ -1159,6 +1159,15 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
             </div>
           </div>
 
+          <nav className="mainTabs headerTabs">
+            <button type="button" className={`mainTab ${mainTab === "diary" ? "active" : ""}`} onClick={() => setMainTab("diary")}>
+              Дневник
+            </button>
+            <button type="button" className={`mainTab ${mainTab === "relocation" ? "active" : ""}`} onClick={() => setMainTab("relocation")}>
+              Переезд / мультивалюта
+            </button>
+          </nav>
+
           <div className="month-line">
             <button className="btn month-btn" disabled={monthIndex(viewMonth) <= monthIndex(calcStart)} onClick={() => setViewMonth(addMonths(viewMonth, -1))}>
               ←
@@ -1180,15 +1189,6 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
         </header>
 
         {message && <div className="toast">{message}</div>}
-
-        <nav className="mainTabs">
-          <button className={`mainTab ${mainTab === "diary" ? "active" : ""}`} onClick={() => setMainTab("diary")}>
-            Дневник
-          </button>
-          <button className={`mainTab ${mainTab === "relocation" ? "active" : ""}`} onClick={() => setMainTab("relocation")}>
-            Переезд / мультивалюта
-          </button>
-        </nav>
 
         {mainTab === "diary" && (
           <>
@@ -1480,6 +1480,7 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
                                 <td><input type="number" value={p.amount} onChange={(e) => updatePayment(p.id, { amount: Number(e.target.value || 0) })} /></td>
                                 <td><input type="number" min="1" max="31" value={p.due_day} onChange={(e) => updatePayment(p.id, { due_day: Number(e.target.value || 1) })} /></td>
                                 <td><input type="month" value={p.valid_from_month || ""} onChange={(e) => updatePayment(p.id, { valid_from_month: e.target.value || null })} /></td>
+                                <td><input type="month" value={p.valid_to_month || ""} onChange={(e) => updatePayment(p.id, { valid_to_month: e.target.value || null })} /></td>
                                 <td><button type="button" className="iconDelete mini" aria-label={`Удалить ${p.title}`} onClick={() => deletePayment(p.id)}>×</button></td>
                               </tr>
                             ))}

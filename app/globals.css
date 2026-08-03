@@ -691,6 +691,66 @@ select {
   font-weight: 500;
 }
 
+.settingsSaveBar {
+  display: grid;
+  gap: 8px;
+  padding: 10px 20px 12px;
+  border-bottom: 1px solid var(--line);
+  background: #fbfcfe;
+}
+
+.settingsSaveTrack {
+  height: 6px;
+  border-radius: 999px;
+  background: #e8edf5;
+  overflow: hidden;
+}
+
+.settingsSaveTrack span {
+  display: block;
+  height: 100%;
+  width: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #9bb4ff 0%, #2f63e0 50%, #9bb4ff 100%);
+  background-size: 200% 100%;
+}
+
+.settingsSaveBar.saving .settingsSaveTrack span {
+  animation: saveStripe 1.2s linear infinite;
+}
+
+.settingsSaveBar.saved .settingsSaveTrack span {
+  width: 100%;
+  background: linear-gradient(90deg, #9ae6c4 0%, #2f9e6d 100%);
+}
+
+.settingsSaveBar.error .settingsSaveTrack span {
+  width: 100%;
+  background: linear-gradient(90deg, #fecaca 0%, #e35d5b 100%);
+}
+
+.settingsSaveMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.settingsSaveMeta strong {
+  font-size: 12px;
+}
+
+.settingsSaveMeta span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@keyframes saveStripe {
+  from { background-position: 200% 0; }
+  to { background-position: 0 0; }
+}
+
 .formgrid,
 .settingsGrid {
   display: grid;
@@ -758,6 +818,140 @@ select {
 .settingsSection {
   display: grid;
   gap: 14px;
+}
+
+.settingsHeadActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.settingsExpenseLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(320px, .82fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.settingsTableCard {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tableCardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.tableCardHead h5 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.tableCardHead span {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.settingsCompactTableWrap {
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.settingsCompactTable {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12px;
+}
+
+.settingsCompactTable th,
+.settingsCompactTable td {
+  padding: 5px 6px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+  vertical-align: middle;
+}
+
+.settingsCompactTable th {
+  background: #f8fafc;
+  color: var(--muted);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.settingsCompactTable td:last-child,
+.settingsCompactTable th:last-child {
+  border-right: 0;
+}
+
+.settingsCompactTable tr:last-child td {
+  border-bottom: 0;
+}
+
+.settingsCompactTable tr.inactive td {
+  background: #f8fafc;
+  opacity: .72;
+}
+
+.settingsCompactTable input,
+.settingsCompactTable select {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  border-radius: 8px;
+  font-size: 12px;
+  padding: 0 8px;
+}
+
+.settingsCompactTable input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+}
+
+.settingsCompactTable th:nth-child(2),
+.settingsCompactTable td:nth-child(2) {
+  min-width: 180px;
+}
+
+.settingsCompactTable .iconDelete.mini {
+  width: 28px;
+  height: 30px;
+  border-radius: 8px;
+}
+
+.creditsSidebar {
+  background: #fbfcff;
+}
+
+.creditsWrap {
+  max-height: 58vh;
+}
+
+.creditCellStack {
+  display: grid;
+  gap: 4px;
+  min-width: 180px;
+}
+
+.settingsEmpty.slim {
+  padding: 16px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .settingsSectionHead {
@@ -994,6 +1188,10 @@ select {
     grid-template-rows: auto minmax(0, 1fr);
   }
 
+  .settingsExpenseLayout {
+    grid-template-columns: 1fr;
+  }
+
   .settingsNav {
     display: flex;
     overflow-x: auto;
@@ -1084,6 +1282,20 @@ select {
 
   .settingsSectionHead .btn {
     width: 100%;
+  }
+
+  .settingsHeadActions {
+    width: 100%;
+  }
+
+  .settingsSaveMeta {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .settingsCompactTable th:nth-child(2),
+  .settingsCompactTable td:nth-child(2) {
+    min-width: 150px;
   }
 
   .settingsItemPrimary {
@@ -1277,19 +1489,21 @@ select {
 }
 
 .plannerKpis {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 9px;
+  display: flex;
+  gap: 8px;
+  overflow: auto;
+  padding-bottom: 2px;
 }
 
 .plannerKpis > div {
-  min-width: 0;
-  padding: 11px;
+  min-width: 155px;
+  padding: 9px 11px;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: 14px;
   background: #fff;
   display: grid;
-  gap: 3px;
+  gap: 2px;
+  flex: 0 0 auto;
 }
 
 .plannerKpis span,
@@ -1311,6 +1525,40 @@ select {
   gap: 10px;
 }
 
+.plannerWorkspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(420px, .92fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.plannerConditionsColumn,
+.plannerCalcColumn {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.compactGrid {
+  grid-template-columns: minmax(0, 1fr) minmax(300px, .92fr);
+}
+
+.compactCard {
+  padding: 11px;
+  gap: 10px;
+}
+
+.compactBreakdown {
+  max-height: 190px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.stickyForecast {
+  position: sticky;
+  top: 10px;
+}
+
 .plannerCard,
 .plannerSources,
 .forecastBlock {
@@ -1321,6 +1569,7 @@ select {
   display: grid;
   gap: 12px;
   min-width: 0;
+  align-content: start;
 }
 
 .kzSyncCard {
@@ -1449,6 +1698,7 @@ select {
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: 16px;
+  max-height: 72vh;
 }
 
 .sourceTable,
@@ -1457,7 +1707,7 @@ select {
   border-spacing: 0;
   width: max-content;
   min-width: 100%;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .sourceTable th,
@@ -1466,7 +1716,7 @@ select {
 .plannerMatrix td {
   border-right: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
-  padding: 6px;
+  padding: 5px;
   background: #fff;
 }
 
@@ -1484,13 +1734,15 @@ select {
 
 .sourceTable input,
 .sourceTable select {
-  height: 31px;
-  border-radius: 9px;
-  min-width: 82px;
+  height: 29px;
+  border-radius: 8px;
+  min-width: 72px;
+  font-size: 11px;
+  padding: 0 7px;
 }
 
 .sourceTable .titleInput {
-  min-width: 190px;
+  min-width: 150px;
 }
 
 .sourceTable input[type="checkbox"] {
@@ -1515,7 +1767,7 @@ select {
 
 .amountEditor {
   display: grid;
-  grid-template-columns: 105px 54px;
+  grid-template-columns: 88px 46px;
   gap: 4px;
 }
 
@@ -1526,7 +1778,7 @@ select {
 
 .periodEditor {
   display: grid;
-  grid-template-columns: 128px 12px 128px;
+  grid-template-columns: 108px 10px 108px;
   gap: 4px;
   align-items: center;
 }
@@ -1632,8 +1884,19 @@ select {
   }
 }
 
+@media (max-width: 1250px) {
+  .plannerWorkspace {
+    grid-template-columns: 1fr;
+  }
+
+  .stickyForecast {
+    position: static;
+  }
+}
+
 @media (max-width: 1050px) {
-  .plannerMainGrid {
+  .plannerMainGrid,
+  .compactGrid {
     grid-template-columns: 1fr;
   }
 

@@ -534,65 +534,67 @@ export default function MigrationPlanner({
         <div><span>Расходы всего</span><b>{fmt(summary.totalExpense)}</b></div>
       </div>
 
-      <div className="plannerMainGrid">
-        <div className="plannerCard kzSyncCard">
-          <div className="cardTitleRow">
-            <div>
-              <h3>Казахстан · {monthLabel(plan.startMonth)}</h3>
-              <p>Точное отражение календарного прогноза дневника.</p>
+      <div className="plannerWorkspace">
+        <div className="plannerConditionsColumn">
+          <div className="plannerMainGrid compactGrid">
+            <div className="plannerCard compactCard kzSyncCard">
+              <div className="cardTitleRow">
+                <div>
+                  <h3>Казахстан · {monthLabel(plan.startMonth)}</h3>
+                  <p>Точное отражение календарного прогноза дневника.</p>
+                </div>
+                <span className="readOnlyBadge">только чтение</span>
+              </div>
+
+              <div className="kzMonthTotals">
+                <div className="income"><span>Доходы</span><b>{fmt(startDiary.incomeTotal)}</b></div>
+                <div className="expense"><span>Расходы</span><b>{fmt(startDiary.expenseTotal)}</b></div>
+                <div><span>Остаток месяца</span><b className={startDiary.net < 0 ? "bad" : "ok"}>{fmt(startDiary.net)}</b></div>
+                <div><span>На конец месяца</span><b className={startEndBalance < 0 ? "bad" : "ok"}>{fmt(startEndBalance)}</b></div>
+              </div>
+
+              <div className="kzBreakdown compactBreakdown">
+                <div>
+                  <h4>Доходы</h4>
+                  {Object.entries(startDiary.incomeBy).filter(([, value]) => Number(value) !== 0).map(([name, value]) => (
+                    <div className="breakdownLine" key={`kzi-${name}`}><span>{name}</span><b>{fmt(value)}</b></div>
+                  ))}
+                  {Object.values(startDiary.incomeBy).every((value) => Number(value) === 0) && <div className="emptyMini">Нет доходов</div>}
+                </div>
+                <div>
+                  <h4>Расходы</h4>
+                  {Object.entries(startDiary.expenseBy).filter(([, value]) => Number(value) !== 0).map(([name, value]) => (
+                    <div className="breakdownLine" key={`kze-${name}`}><span>{name}</span><b>{fmt(value)}</b></div>
+                  ))}
+                  {Object.values(startDiary.expenseBy).every((value) => Number(value) === 0) && <div className="emptyMini">Нет расходов</div>}
+                </div>
+              </div>
             </div>
-            <span className="readOnlyBadge">только чтение</span>
+
+            <div className="plannerCard compactCard salaryCard">
+              <div className="cardTitleRow">
+                <div>
+                  <h3>Германия · расчёт дохода</h3>
+                  <p>Нетто автоматически подставляется в строки сценария.</p>
+                </div>
+              </div>
+              <div className="salaryGrid">
+                <label>Подработка gross, €<input type="number" value={plan.grossPartTime} onChange={(e) => updatePlan({ grossPartTime: Number(e.target.value || 0) })} /></label>
+                <label>Основная gross, €<input type="number" value={plan.grossMain} onChange={(e) => updatePlan({ grossMain: Number(e.target.value || 0) })} /></label>
+                <label>Доп. взнос KK<input type="number" step="0.001" value={plan.kkAdditional} onChange={(e) => updatePlan({ kkAdditional: Number(e.target.value || 0) })} /></label>
+                <label className="checkLine"><input type="checkbox" checked={plan.hasChildren} onChange={(e) => updatePlan({ hasChildren: e.target.checked })} /> есть дети</label>
+                <label className="checkLine"><input type="checkbox" checked={plan.churchTax} onChange={(e) => updatePlan({ churchTax: e.target.checked })} /> церковный налог</label>
+              </div>
+              <div className="salaryResults">
+                <div><span>Подработка netto</span><b>{fmt(partTimeNet.net, "EUR")}</b></div>
+                <div><span>Основная netto</span><b>{fmt(mainNet.net, "EUR")}</b></div>
+                <div><span>Удержания основной</span><b>{fmt(mainNet.deductions, "EUR")}</b></div>
+              </div>
+              <p className="smallWarn">Расчёт ориентировочный. Для точного сценария можно выбрать «ручная сумма» в нужной строке дохода.</p>
+            </div>
           </div>
 
-          <div className="kzMonthTotals">
-            <div className="income"><span>Доходы</span><b>{fmt(startDiary.incomeTotal)}</b></div>
-            <div className="expense"><span>Расходы</span><b>{fmt(startDiary.expenseTotal)}</b></div>
-            <div><span>Остаток месяца</span><b className={startDiary.net < 0 ? "bad" : "ok"}>{fmt(startDiary.net)}</b></div>
-            <div><span>На конец месяца</span><b className={startEndBalance < 0 ? "bad" : "ok"}>{fmt(startEndBalance)}</b></div>
-          </div>
-
-          <div className="kzBreakdown">
-            <div>
-              <h4>Доходы</h4>
-              {Object.entries(startDiary.incomeBy).filter(([, value]) => Number(value) !== 0).map(([name, value]) => (
-                <div className="breakdownLine" key={`kzi-${name}`}><span>{name}</span><b>{fmt(value)}</b></div>
-              ))}
-              {Object.values(startDiary.incomeBy).every((value) => Number(value) === 0) && <div className="emptyMini">Нет доходов</div>}
-            </div>
-            <div>
-              <h4>Расходы</h4>
-              {Object.entries(startDiary.expenseBy).filter(([, value]) => Number(value) !== 0).map(([name, value]) => (
-                <div className="breakdownLine" key={`kze-${name}`}><span>{name}</span><b>{fmt(value)}</b></div>
-              ))}
-              {Object.values(startDiary.expenseBy).every((value) => Number(value) === 0) && <div className="emptyMini">Нет расходов</div>}
-            </div>
-          </div>
-        </div>
-
-        <div className="plannerCard salaryCard">
-          <div className="cardTitleRow">
-            <div>
-              <h3>Германия · расчёт дохода</h3>
-              <p>Нетто автоматически подставляется в строки сценария.</p>
-            </div>
-          </div>
-          <div className="salaryGrid">
-            <label>Подработка gross, €<input type="number" value={plan.grossPartTime} onChange={(e) => updatePlan({ grossPartTime: Number(e.target.value || 0) })} /></label>
-            <label>Основная gross, €<input type="number" value={plan.grossMain} onChange={(e) => updatePlan({ grossMain: Number(e.target.value || 0) })} /></label>
-            <label>Доп. взнос KK<input type="number" step="0.001" value={plan.kkAdditional} onChange={(e) => updatePlan({ kkAdditional: Number(e.target.value || 0) })} /></label>
-            <label className="checkLine"><input type="checkbox" checked={plan.hasChildren} onChange={(e) => updatePlan({ hasChildren: e.target.checked })} /> есть дети</label>
-            <label className="checkLine"><input type="checkbox" checked={plan.churchTax} onChange={(e) => updatePlan({ churchTax: e.target.checked })} /> церковный налог</label>
-          </div>
-          <div className="salaryResults">
-            <div><span>Подработка netto</span><b>{fmt(partTimeNet.net, "EUR")}</b></div>
-            <div><span>Основная netto</span><b>{fmt(mainNet.net, "EUR")}</b></div>
-            <div><span>Удержания основной</span><b>{fmt(mainNet.deductions, "EUR")}</b></div>
-          </div>
-          <p className="smallWarn">Расчёт ориентировочный. Для точного сценария можно выбрать «ручная сумма» в нужной строке дохода.</p>
-        </div>
-      </div>
-
-      <div className="plannerSources">
+          <div className="plannerSources">
         <div className="sourcesHead">
           <div>
             <h3>Германия и прочие сценарные статьи</h3>
@@ -692,9 +694,11 @@ export default function MigrationPlanner({
             </tbody>
           </table>
         </div>
-      </div>
+          </div>
+        </div>
 
-      <div className="forecastBlock">
+        <aside className="plannerCalcColumn">
+          <div className="forecastBlock stickyForecast">
         <div className="forecastHead">
           <div>
             <h3>Помесячный сценарий</h3>
@@ -772,6 +776,8 @@ export default function MigrationPlanner({
             </tbody>
           </table>
         </div>
+          </div>
+        </aside>
       </div>
     </section>
   );

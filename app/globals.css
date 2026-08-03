@@ -220,6 +220,47 @@ select {
   cursor: not-allowed;
 }
 
+
+.monthPicker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 76px 24px;
+  gap: 4px;
+  align-items: center;
+  width: 100%;
+}
+
+.monthPicker select {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 0 7px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.monthPickerClear,
+.monthPickerStub {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+}
+
+.monthPickerClear {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.monthPickerStub {
+  border: 0;
+}
+
 .summaryGrid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -251,6 +292,10 @@ select {
 }
 
 .summaryCard.expense b {
+  color: var(--red);
+}
+
+.summaryCard.negative b {
   color: var(--red);
 }
 
@@ -603,6 +648,47 @@ select {
   font-weight: 700;
 }
 
+.matrix .incomeSection th,
+.matrix .incomeSection td,
+.matrix .incomeRow .rowhead,
+.matrix .incomeRow td {
+  background: #eefaf2;
+}
+
+.matrix .incomeSection th,
+.matrix .incomeSection td,
+.matrix .incomeRow td {
+  color: #0f7a50;
+}
+
+.matrix .expenseSection th,
+.matrix .expenseSection td,
+.matrix .expenseRow .rowhead,
+.matrix .expenseRow td {
+  background: #fff4f2;
+}
+
+.matrix .expenseSection th,
+.matrix .expenseSection td,
+.matrix .expenseRow td {
+  color: var(--red);
+}
+
+.matrix .cumulativeRow th,
+.matrix .cumulativeRow td {
+  background: #fff7d6;
+}
+
+.matrix .netRow th,
+.matrix .netRow td {
+  background: #eef4ff;
+}
+
+.matrix td.neg {
+  color: var(--red);
+  font-weight: 700;
+}
+
 .matrix .light {
   font-weight: 600;
 }
@@ -950,6 +1036,24 @@ select {
   width: 16px;
   height: 16px;
   min-width: 16px;
+}
+
+
+.settingsCompactTable .monthPicker {
+  grid-template-columns: minmax(0, 1fr) 62px 22px;
+}
+
+.settingsCompactTable .monthPicker select {
+  height: 30px;
+  font-size: 11px;
+  padding: 0 5px;
+}
+
+.settingsCompactTable .monthPickerClear,
+.settingsCompactTable .monthPickerStub {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
 }
 
 .settingsCompactTable th:nth-child(2),
@@ -1861,13 +1965,28 @@ select {
 
 .periodEditor {
   display: grid;
-  grid-template-columns: 108px 10px 108px;
+  grid-template-columns: minmax(0, 1fr) 10px minmax(0, 1fr);
   gap: 4px;
   align-items: center;
 }
 
 .periodEditor input {
   min-width: 0;
+}
+
+.periodEditor .monthPicker {
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) 62px 0px;
+}
+
+.periodEditor .monthPickerStub {
+  display: none;
+}
+
+.periodEditor .monthPicker select {
+  height: 29px;
+  font-size: 11px;
+  padding: 0 5px;
 }
 
 .periodEditor span {
@@ -1922,10 +2041,33 @@ select {
   font-weight: 700;
 }
 
+.plannerMatrix .totalIncomeRow th,
+.plannerMatrix .totalIncomeRow td,
+.plannerMatrix .incomeSection th,
+.plannerMatrix .incomeSection td {
+  background: #eefaf2;
+  color: #0f7a50;
+  font-weight: 700;
+}
+
+.plannerMatrix .totalExpenseRow th,
+.plannerMatrix .totalExpenseRow td,
+.plannerMatrix .expenseSection th,
+.plannerMatrix .expenseSection td {
+  background: #fff4f2;
+  color: var(--red);
+  font-weight: 700;
+}
+
 .plannerMatrix .section th,
 .plannerMatrix .section td {
   background: #f8fafc;
   font-weight: 700;
+}
+
+.plannerMatrix .cumulativeRow th,
+.plannerMatrix .cumulativeRow td {
+  background: #fff7d6;
 }
 
 .plannerMatrix .countrySection th,
@@ -2060,4 +2202,8 @@ select {
   .matrixCurrencyTools {
     justify-content: flex-start;
   }
+}
+
+@media (max-width: 760px) {
+  .monthPicker { grid-template-columns: minmax(0, 1fr) 68px 22px; }
 }

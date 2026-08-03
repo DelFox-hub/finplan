@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 import MigrationPlanner from "@/components/MigrationPlanner";
+import MonthPicker from "@/components/MonthPicker";
 
 type Kind = "income" | "expense";
 type PaymentType = "regular" | "credit";
@@ -1193,7 +1194,7 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
         {mainTab === "diary" && (
           <>
         <section className="summaryGrid">
-          <div className="summaryCard">
+          <div className={`summaryCard ${before < 0 ? "negative" : ""}`}>
             <b>{fmt(before)}</b>
             <span>на начало месяца</span>
           </div>
@@ -1205,7 +1206,7 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
             <b>{fmt(selectedPlan.expenseTotal)}</b>
             <span>расходы месяца</span>
           </div>
-          <div className="summaryCard">
+          <div className={`summaryCard ${(forecast[0]?.balance || 0) < 0 ? "negative" : ""}`}>
             <b>{fmt(forecast[0]?.balance || 0)}</b>
             <span>на конец месяца</span>
           </div>
@@ -1323,18 +1324,18 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
                   </tr>
                 </thead>
                 <tbody>
-                  <tr className="strong"><th className="rowhead">Остаток месяца</th>{forecast.map((m) => <td key={`net-${m.month}`}>{full(m.net)}</td>)}</tr>
-                  <tr className="strong"><th className="rowhead">Накопительно</th>{forecast.map((m) => <td key={`bal-${m.month}`}>{full(m.balance)}</td>)}</tr>
-                  <tr className="section"><th className="rowhead">Доходы</th>{forecast.map((m) => <td key={`inc-${m.month}`}>{full(m.incomeTotal)}</td>)}</tr>
+                  <tr className="strong netRow"><th className="rowhead">Остаток месяца</th>{forecast.map((m) => <td className={m.net < 0 ? "neg" : ""} key={`net-${m.month}`}>{full(m.net)}</td>)}</tr>
+                  <tr className="strong cumulativeRow"><th className="rowhead">Накопительно</th>{forecast.map((m) => <td className={m.balance < 0 ? "neg" : ""} key={`bal-${m.month}`}>{full(m.balance)}</td>)}</tr>
+                  <tr className="section incomeSection"><th className="rowhead">Доходы</th>{forecast.map((m) => <td key={`inc-${m.month}`}>{full(m.incomeTotal)}</td>)}</tr>
                   {incomeRowNames.map((name) => (
-                    <tr key={`incrow-${name}`}>
+                    <tr className="incomeRow" key={`incrow-${name}`}>
                       <th className="rowhead light">{name}</th>
                       {forecast.map((m) => <td key={`${name}-${m.month}`}>{full(m.incomeBy[name] || 0)}</td>)}
                     </tr>
                   ))}
-                  <tr className="section"><th className="rowhead">Расходы</th>{forecast.map((m) => <td key={`exp-${m.month}`}>{full(m.expenseTotal)}</td>)}</tr>
+                  <tr className="section expenseSection"><th className="rowhead">Расходы</th>{forecast.map((m) => <td key={`exp-${m.month}`}>{full(m.expenseTotal)}</td>)}</tr>
                   {expenseRowNames.map((name) => (
-                    <tr key={`exprow-${name}`}>
+                    <tr className="expenseRow" key={`exprow-${name}`}>
                       <th className="rowhead light">{name}</th>
                       {forecast.map((m) => <td key={`${name}-${m.month}`}>{full(m.expenseBy[name] || 0)}</td>)}
                     </tr>
@@ -1436,7 +1437,7 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
                       </div>
                     </div>
                     <div className="settingsGrid settingsGridCards">
-                      <label>Считать с месяца<input type="month" value={settings.calc_start_month} onChange={(e) => updateSettings({ calc_start_month: e.target.value || currentMonth() })} /></label>
+                      <label>Считать с месяца<MonthPicker value={settings.calc_start_month} onChange={(value) => updateSettings({ calc_start_month: value || currentMonth() })} /></label>
                       <label>Стартовый остаток<input type="number" value={settings.start_balance} onChange={(e) => updateSettings({ start_balance: Number(e.target.value || 0) })} /></label>
                       <label>Резервный план дохода<input type="number" value={settings.plan_income} onChange={(e) => updateSettings({ plan_income: Number(e.target.value || 0) })} /><span>Используется только когда регулярные доходы не заведены.</span></label>
                       <label>Резервный план расходов<input type="number" value={settings.plan_other} onChange={(e) => updateSettings({ plan_other: Number(e.target.value || 0) })} /><span>Используется только когда регулярные расходы не заведены.</span></label>
@@ -1479,8 +1480,8 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
                                 <td><select value={p.category_id || ""} onChange={(e) => updatePayment(p.id, { category_id: e.target.value || null })}>{expenseCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></td>
                                 <td><input type="number" value={p.amount} onChange={(e) => updatePayment(p.id, { amount: Number(e.target.value || 0) })} /></td>
                                 <td><input type="number" min="1" max="31" value={p.due_day} onChange={(e) => updatePayment(p.id, { due_day: Number(e.target.value || 1) })} /></td>
-                                <td><input type="month" value={p.valid_from_month || ""} onChange={(e) => updatePayment(p.id, { valid_from_month: e.target.value || null })} /></td>
-                                <td><input type="month" value={p.valid_to_month || ""} onChange={(e) => updatePayment(p.id, { valid_to_month: e.target.value || null })} /></td>
+                                <td><MonthPicker value={p.valid_from_month} onChange={(value) => updatePayment(p.id, { valid_from_month: value })} nullable /></td>
+                                <td><MonthPicker value={p.valid_to_month} onChange={(value) => updatePayment(p.id, { valid_to_month: value })} nullable /></td>
                                 <td><button type="button" className="iconDelete mini" aria-label={`Удалить ${p.title}`} onClick={() => deletePayment(p.id)}>×</button></td>
                               </tr>
                             ))}
@@ -1528,7 +1529,7 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
                                 <td><input type="number" min="1" max="31" value={p.due_day} onChange={(e) => updatePayment(p.id, { due_day: Number(e.target.value || 1) })} /></td>
                                 <td><input type="number" min="0" value={p.total_months} onChange={(e) => updatePayment(p.id, { total_months: Number(e.target.value || 0) })} /></td>
                                 <td><input type="number" min="0" value={p.paid_months} onChange={(e) => updatePayment(p.id, { paid_months: Number(e.target.value || 0) })} /></td>
-                                <td><input type="month" value={p.valid_from_month || ""} onChange={(e) => updatePayment(p.id, { valid_from_month: e.target.value || null })} /></td>
+                                <td><MonthPicker value={p.valid_from_month} onChange={(value) => updatePayment(p.id, { valid_from_month: value })} nullable /></td>
                                 <td><button type="button" className="iconDelete mini" aria-label={`Удалить ${p.title}`} onClick={() => deletePayment(p.id)}>×</button></td>
                               </tr>
                             ))}
@@ -1573,8 +1574,8 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
                                 <td><input type="number" value={i.amount} onChange={(e) => updateIncome(i.id, { amount: Number(e.target.value || 0) })} /></td>
                                 <td><select value={i.frequency} onChange={(e) => updateIncome(i.id, { frequency: e.target.value as Frequency })}>{Object.entries(freqLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></td>
                                 <td><input type="number" min="1" max="31" value={i.due_day} onChange={(e) => updateIncome(i.id, { due_day: Number(e.target.value || 1) })} /></td>
-                                <td><input type="month" value={i.valid_from_month || ""} onChange={(e) => updateIncome(i.id, { valid_from_month: e.target.value || null })} /></td>
-                                <td><input type="month" value={i.valid_to_month || ""} onChange={(e) => updateIncome(i.id, { valid_to_month: e.target.value || null })} /></td>
+                                <td><MonthPicker value={i.valid_from_month} onChange={(value) => updateIncome(i.id, { valid_from_month: value })} nullable /></td>
+                                <td><MonthPicker value={i.valid_to_month} onChange={(value) => updateIncome(i.id, { valid_to_month: value })} nullable /></td>
                                 <td><button type="button" className="iconDelete mini" aria-label={`Удалить ${i.title}`} onClick={() => deleteIncome(i.id)}>×</button></td>
                               </tr>
                             ))}

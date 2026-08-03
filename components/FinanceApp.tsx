@@ -286,7 +286,7 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
   const [opsPage, setOpsPage] = useState(1);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [mainTab, setMainTab] = useState<"diary" | "relocation">("diary");
-  const [settingsTab, setSettingsTab] = useState<"main" | "expenses" | "incomes" | "categories" | "import">("expenses");
+  const [settingsTab, setSettingsTab] = useState<"main" | "expenses" | "credits" | "incomes" | "categories" | "import">("expenses");
   const [saveState, setSaveState] = useState<{ status: "saved" | "saving" | "error"; message: string }>({
     status: "saved",
     message: "Все изменения сохранены"
@@ -1420,6 +1420,7 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
               <nav className="settingsNav" aria-label="Разделы настроек">
                 <button type="button" className={settingsTab === "main" ? "active" : ""} onClick={() => setSettingsTab("main")}>Параметры</button>
                 <button type="button" className={settingsTab === "expenses" ? "active" : ""} onClick={() => setSettingsTab("expenses")}>Платежи</button>
+                <button type="button" className={settingsTab === "credits" ? "active" : ""} onClick={() => setSettingsTab("credits")}>Кредиты</button>
                 <button type="button" className={settingsTab === "incomes" ? "active" : ""} onClick={() => setSettingsTab("incomes")}>Доходы</button>
                 <button type="button" className={settingsTab === "categories" ? "active" : ""} onClick={() => setSettingsTab("categories")}>Статьи</button>
                 <button type="button" className={settingsTab === "import" ? "active" : ""} onClick={() => setSettingsTab("import")}>Импорт</button>
@@ -1449,85 +1450,94 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
                     <div className="settingsSectionHead">
                       <div>
                         <h4>Регулярные расходы</h4>
-                        <p>Основные платежи — слева. Кредиты и рассрочки вынесены в отдельный боковой блок.</p>
+                        <p>Обычные ежемесячные и разовые платежи без кредитов и рассрочек.</p>
                       </div>
                       <div className="settingsHeadActions">
                         <button className="btn blue" type="button" onClick={() => addPayment("regular")}>+ Платёж</button>
-                        <button className="btn" type="button" onClick={() => addPayment("credit")}>+ Кредит</button>
                       </div>
                     </div>
 
-                    <div className="settingsExpenseLayout">
-                      <section className="settingsTableCard">
-                        <div className="tableCardHead">
-                          <div>
-                            <h5>Платежи</h5>
-                            <span>{regularPayments.length} строк</span>
-                          </div>
+                    <section className="settingsTableCard">
+                      <div className="tableCardHead">
+                        <div>
+                          <h5>Платежи</h5>
+                          <span>{regularPayments.length} строк</span>
                         </div>
-                        <div className="settingsCompactTableWrap">
-                          <table className="settingsCompactTable">
-                            <thead>
-                              <tr>
-                                <th>on</th><th>Название</th><th>Статья</th><th>Сумма</th><th>День</th><th>С</th><th>До</th><th></th>
+                      </div>
+                      <div className="settingsCompactTableWrap">
+                        <table className="settingsCompactTable paymentsTable">
+                          <thead>
+                            <tr>
+                              <th>on</th><th>Название</th><th>Статья</th><th>Сумма</th><th>День</th><th>С</th><th>До</th><th></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {regularPayments.map((p) => (
+                              <tr key={p.id} className={p.active ? "" : "inactive"}>
+                                <td><input type="checkbox" checked={p.active} onChange={(e) => updatePayment(p.id, { active: e.target.checked })} /></td>
+                                <td><input value={p.title} onChange={(e) => updatePayment(p.id, { title: e.target.value })} /></td>
+                                <td><select value={p.category_id || ""} onChange={(e) => updatePayment(p.id, { category_id: e.target.value || null })}>{expenseCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></td>
+                                <td><input type="number" value={p.amount} onChange={(e) => updatePayment(p.id, { amount: Number(e.target.value || 0) })} /></td>
+                                <td><input type="number" min="1" max="31" value={p.due_day} onChange={(e) => updatePayment(p.id, { due_day: Number(e.target.value || 1) })} /></td>
+                                <td><input type="month" value={p.valid_from_month || ""} onChange={(e) => updatePayment(p.id, { valid_from_month: e.target.value || null })} /></td>
+                                <td><input type="month" value={p.valid_to_month || ""} onChange={(e) => updatePayment(p.id, { valid_to_month: e.target.value || null })} /></td>
+                                <td><button type="button" className="iconDelete mini" aria-label={`Удалить ${p.title}`} onClick={() => deletePayment(p.id)}>×</button></td>
                               </tr>
-                            </thead>
-                            <tbody>
-                              {regularPayments.map((p) => (
-                                <tr key={p.id} className={p.active ? "" : "inactive"}>
-                                  <td><input type="checkbox" checked={p.active} onChange={(e) => updatePayment(p.id, { active: e.target.checked })} /></td>
-                                  <td><input value={p.title} onChange={(e) => updatePayment(p.id, { title: e.target.value })} /></td>
-                                  <td><select value={p.category_id || ""} onChange={(e) => updatePayment(p.id, { category_id: e.target.value || null })}>{expenseCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></td>
-                                  <td><input type="number" value={p.amount} onChange={(e) => updatePayment(p.id, { amount: Number(e.target.value || 0) })} /></td>
-                                  <td><input type="number" min="1" max="31" value={p.due_day} onChange={(e) => updatePayment(p.id, { due_day: Number(e.target.value || 1) })} /></td>
-                                  <td><input type="month" value={p.valid_from_month || ""} onChange={(e) => updatePayment(p.id, { valid_from_month: e.target.value || null })} /></td>
-                                  <td><input type="month" value={p.valid_to_month || ""} onChange={(e) => updatePayment(p.id, { valid_to_month: e.target.value || null })} /></td>
-                                  <td><button type="button" className="iconDelete mini" aria-label={`Удалить ${p.title}`} onClick={() => deletePayment(p.id)}>×</button></td>
-                                </tr>
-                              ))}
-                              {!regularPayments.length && <tr><td colSpan={8}><div className="settingsEmpty slim">Регулярных платежей пока нет.</div></td></tr>}
-                            </tbody>
-                          </table>
-                        </div>
-                      </section>
+                            ))}
+                            {!regularPayments.length && <tr><td colSpan={8}><div className="settingsEmpty slim">Регулярных платежей пока нет.</div></td></tr>}
+                          </tbody>
+                        </table>
+                      </div>
+                    </section>
+                  </div>
+                )}
 
-                      <aside className="settingsTableCard creditsSidebar">
-                        <div className="tableCardHead stickySmallHead">
-                          <div>
-                            <h5>Кредиты / рассрочки</h5>
-                            <span>{creditPayments.length} строк</span>
-                          </div>
-                        </div>
-                        <div className="settingsCompactTableWrap creditsWrap">
-                          <table className="settingsCompactTable creditTable">
-                            <thead>
-                              <tr>
-                                <th>on</th><th>Название</th><th>Сумма</th><th>День</th><th>Срок</th><th>Опл.</th><th></th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {creditPayments.map((p) => (
-                                <tr key={p.id} className={p.active ? "" : "inactive"}>
-                                  <td><input type="checkbox" checked={p.active} onChange={(e) => updatePayment(p.id, { active: e.target.checked })} /></td>
-                                  <td>
-                                    <div className="creditCellStack">
-                                      <input value={p.title} onChange={(e) => updatePayment(p.id, { title: e.target.value })} />
-                                      <select value={p.category_id || ""} onChange={(e) => updatePayment(p.id, { category_id: e.target.value || null })}>{expenseCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
-                                    </div>
-                                  </td>
-                                  <td><input type="number" value={p.amount} onChange={(e) => updatePayment(p.id, { amount: Number(e.target.value || 0) })} /></td>
-                                  <td><input type="number" min="1" max="31" value={p.due_day} onChange={(e) => updatePayment(p.id, { due_day: Number(e.target.value || 1) })} /></td>
-                                  <td><input type="number" min="0" value={p.total_months} onChange={(e) => updatePayment(p.id, { total_months: Number(e.target.value || 0) })} /></td>
-                                  <td><input type="number" min="0" value={p.paid_months} onChange={(e) => updatePayment(p.id, { paid_months: Number(e.target.value || 0) })} /></td>
-                                  <td><button type="button" className="iconDelete mini" aria-label={`Удалить ${p.title}`} onClick={() => deletePayment(p.id)}>×</button></td>
-                                </tr>
-                              ))}
-                              {!creditPayments.length && <tr><td colSpan={7}><div className="settingsEmpty slim">Кредитов пока нет.</div></td></tr>}
-                            </tbody>
-                          </table>
-                        </div>
-                      </aside>
+                {settingsTab === "credits" && (
+                  <div className="settingsSection">
+                    <div className="settingsSectionHead">
+                      <div>
+                        <h4>Кредиты / рассрочки</h4>
+                        <p>Отдельная вкладка только для кредитных обязательств, чтобы не засорять обычные расходы.</p>
+                      </div>
+                      <div className="settingsHeadActions">
+                        <button className="btn blue" type="button" onClick={() => addPayment("credit")}>+ Кредит</button>
+                      </div>
                     </div>
+
+                    <section className="settingsTableCard">
+                      <div className="tableCardHead">
+                        <div>
+                          <h5>Кредиты</h5>
+                          <span>{creditPayments.length} строк</span>
+                        </div>
+                      </div>
+                      <div className="settingsCompactTableWrap">
+                        <table className="settingsCompactTable creditTable">
+                          <thead>
+                            <tr>
+                              <th>on</th><th>Название</th><th>Статья</th><th>Сумма</th><th>День</th><th>Всего мес.</th><th>Оплачено</th><th>С</th><th>До</th><th></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {creditPayments.map((p) => (
+                              <tr key={p.id} className={p.active ? "" : "inactive"}>
+                                <td><input type="checkbox" checked={p.active} onChange={(e) => updatePayment(p.id, { active: e.target.checked })} /></td>
+                                <td><input value={p.title} onChange={(e) => updatePayment(p.id, { title: e.target.value })} /></td>
+                                <td><select value={p.category_id || ""} onChange={(e) => updatePayment(p.id, { category_id: e.target.value || null })}>{expenseCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></td>
+                                <td><input type="number" value={p.amount} onChange={(e) => updatePayment(p.id, { amount: Number(e.target.value || 0) })} /></td>
+                                <td><input type="number" min="1" max="31" value={p.due_day} onChange={(e) => updatePayment(p.id, { due_day: Number(e.target.value || 1) })} /></td>
+                                <td><input type="number" min="0" value={p.total_months} onChange={(e) => updatePayment(p.id, { total_months: Number(e.target.value || 0) })} /></td>
+                                <td><input type="number" min="0" value={p.paid_months} onChange={(e) => updatePayment(p.id, { paid_months: Number(e.target.value || 0) })} /></td>
+                                <td><input type="month" value={p.valid_from_month || ""} onChange={(e) => updatePayment(p.id, { valid_from_month: e.target.value || null })} /></td>
+                                <td><input type="month" value={p.valid_to_month || ""} onChange={(e) => updatePayment(p.id, { valid_to_month: e.target.value || null })} /></td>
+                                <td><button type="button" className="iconDelete mini" aria-label={`Удалить ${p.title}`} onClick={() => deletePayment(p.id)}>×</button></td>
+                              </tr>
+                            ))}
+                            {!creditPayments.length && <tr><td colSpan={10}><div className="settingsEmpty slim">Кредитов пока нет.</div></td></tr>}
+                          </tbody>
+                        </table>
+                      </div>
+                    </section>
                   </div>
                 )}
 

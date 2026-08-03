@@ -647,7 +647,7 @@ select {
   padding: 0;
   gap: 0;
   overflow: hidden;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   border-radius: 20px;
 }
 
@@ -693,8 +693,8 @@ select {
 
 .settingsSaveBar {
   display: grid;
-  gap: 8px;
-  padding: 10px 20px 12px;
+  gap: 6px;
+  padding: 8px 20px 10px;
   border-bottom: 1px solid var(--line);
   background: #fbfcfe;
 }
@@ -828,7 +828,7 @@ select {
 
 .settingsExpenseLayout {
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(320px, .82fr);
+  grid-template-columns: 1fr;
   gap: 12px;
   align-items: start;
 }
@@ -863,14 +863,18 @@ select {
 }
 
 .settingsCompactTableWrap {
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   border: 1px solid var(--line);
   border-radius: 12px;
+  max-height: 50vh;
 }
 
 .settingsCompactTable {
-  width: max-content;
-  min-width: 100%;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
   font-size: 12px;
@@ -883,13 +887,15 @@ select {
   border-bottom: 1px solid var(--line);
   background: #fff;
   vertical-align: middle;
+  min-width: 0;
 }
 
 .settingsCompactTable th {
   background: #f8fafc;
   color: var(--muted);
   font-weight: 700;
-  white-space: nowrap;
+  white-space: normal;
+  line-height: 1.2;
 }
 
 .settingsCompactTable td:last-child,
@@ -913,7 +919,12 @@ select {
   height: 30px;
   border-radius: 8px;
   font-size: 12px;
-  padding: 0 8px;
+  padding: 0 6px;
+}
+
+.settingsCompactTable input[type="month"] {
+  font-size: 11px;
+  padding-right: 2px;
 }
 
 .settingsCompactTable input[type="checkbox"] {
@@ -924,7 +935,7 @@ select {
 
 .settingsCompactTable th:nth-child(2),
 .settingsCompactTable td:nth-child(2) {
-  min-width: 180px;
+  min-width: 0;
 }
 
 .settingsCompactTable .iconDelete.mini {
@@ -932,6 +943,37 @@ select {
   height: 30px;
   border-radius: 8px;
 }
+
+
+.paymentsTable th:nth-child(1), .paymentsTable td:nth-child(1) { width: 34px; }
+.paymentsTable th:nth-child(2), .paymentsTable td:nth-child(2) { width: 23%; }
+.paymentsTable th:nth-child(3), .paymentsTable td:nth-child(3) { width: 18%; }
+.paymentsTable th:nth-child(4), .paymentsTable td:nth-child(4) { width: 12%; }
+.paymentsTable th:nth-child(5), .paymentsTable td:nth-child(5) { width: 8%; }
+.paymentsTable th:nth-child(6), .paymentsTable td:nth-child(6) { width: 16%; }
+.paymentsTable th:nth-child(7), .paymentsTable td:nth-child(7) { width: 16%; }
+.paymentsTable th:nth-child(8), .paymentsTable td:nth-child(8) { width: 34px; }
+
+.incomeTable th:nth-child(1), .incomeTable td:nth-child(1) { width: 34px; }
+.incomeTable th:nth-child(2), .incomeTable td:nth-child(2) { width: 19%; }
+.incomeTable th:nth-child(3), .incomeTable td:nth-child(3) { width: 15%; }
+.incomeTable th:nth-child(4), .incomeTable td:nth-child(4) { width: 11%; }
+.incomeTable th:nth-child(5), .incomeTable td:nth-child(5) { width: 13%; }
+.incomeTable th:nth-child(6), .incomeTable td:nth-child(6) { width: 8%; }
+.incomeTable th:nth-child(7), .incomeTable td:nth-child(7) { width: 14%; }
+.incomeTable th:nth-child(8), .incomeTable td:nth-child(8) { width: 14%; }
+.incomeTable th:nth-child(9), .incomeTable td:nth-child(9) { width: 34px; }
+
+.creditTable th:nth-child(1), .creditTable td:nth-child(1) { width: 34px; }
+.creditTable th:nth-child(2), .creditTable td:nth-child(2) { width: 17%; }
+.creditTable th:nth-child(3), .creditTable td:nth-child(3) { width: 14%; }
+.creditTable th:nth-child(4), .creditTable td:nth-child(4) { width: 11%; }
+.creditTable th:nth-child(5), .creditTable td:nth-child(5) { width: 8%; }
+.creditTable th:nth-child(6), .creditTable td:nth-child(6) { width: 10%; }
+.creditTable th:nth-child(7), .creditTable td:nth-child(7) { width: 10%; }
+.creditTable th:nth-child(8), .creditTable td:nth-child(8) { width: 13%; }
+.creditTable th:nth-child(9), .creditTable td:nth-child(9) { width: 13%; }
+.creditTable th:nth-child(10), .creditTable td:nth-child(10) { width: 34px; }
 
 .creditsSidebar {
   background: #fbfcff;
@@ -944,7 +986,7 @@ select {
 .creditCellStack {
   display: grid;
   gap: 4px;
-  min-width: 180px;
+  min-width: 0;
 }
 
 .settingsEmpty.slim {
@@ -1185,7 +1227,7 @@ select {
 
   .settingsLayout {
     grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr);
   }
 
   .settingsExpenseLayout {
@@ -1295,7 +1337,7 @@ select {
 
   .settingsCompactTable th:nth-child(2),
   .settingsCompactTable td:nth-child(2) {
-    min-width: 150px;
+    min-width: 0;
   }
 
   .settingsItemPrimary {

@@ -97,13 +97,6 @@ select {
   min-width: 0;
 }
 
-.loginModes {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.loginModes button,
 .btn,
 .primaryBtn {
   height: 36px;
@@ -114,7 +107,6 @@ select {
   font-weight: 800;
 }
 
-.loginModes button.active,
 .primaryBtn,
 .btn.blue {
   background: var(--blue);

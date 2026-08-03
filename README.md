@@ -5,7 +5,7 @@
 
 ## Что внутри
 
-- `app/login` — вход по email magic link или паролю.
+- `app/login` — обычный вход по email и паролю.
 - `app/app` — сам финансовый дневник.
 - `supabase/schema.sql` — таблицы и RLS-политики.
 - `components/FinanceApp.tsx` — основная логика: операции, регулярные платежи, регулярные доходы, чеклист, прогноз, импорт.
@@ -27,13 +27,15 @@
 
 ## 2. Auth
 
-В Supabase включи Email Auth.
+В Supabase включи Email Auth с паролем.
 
 Для режима только под себя:
-- сначала создай / подтверди свой аккаунт;
-- потом в Supabase Auth settings лучше отключить публичные signup, если не хочешь, чтобы кто-то создавал лишние аккаунты.
+- создай пользователя вручную: Supabase → Authentication → Users → Add user;
+- укажи свой email и пароль;
+- email должен совпадать с `ALLOWED_EMAIL` в Vercel и с email в `app_config` из SQL;
+- публичную регистрацию можно отключить.
 
-RLS всё равно не даст чужому аккаунту читать или менять твои таблицы, потому что политики проверяют `auth.uid()` и email из `app_config`.
+RLS не даст чужому аккаунту читать или менять твои таблицы, потому что политики проверяют `auth.uid()` и email из `app_config`.
 
 ## 3. Локальный запуск
 
@@ -66,14 +68,17 @@ ALLOWED_EMAIL
 
 4. Deploy.
 
-## 5. Redirect URL в Supabase
+## 5. Вход на сайт
 
-В Supabase Auth → URL Configuration добавь адреса:
+Magic link больше не используется, поэтому `/auth/callback` не нужен.
+
+После деплоя открой:
 
 ```txt
-http://localhost:3000/auth/callback
-https://YOUR-VERCEL-DOMAIN.vercel.app/auth/callback
+https://YOUR-VERCEL-DOMAIN.vercel.app/login
 ```
+
+Введи email и пароль пользователя, которого создала в Supabase Auth.
 
 ## 6. Импорт из старого HTML
 

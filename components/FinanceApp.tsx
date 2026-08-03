@@ -1480,7 +1480,6 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
                                 <td><input type="number" value={p.amount} onChange={(e) => updatePayment(p.id, { amount: Number(e.target.value || 0) })} /></td>
                                 <td><input type="number" min="1" max="31" value={p.due_day} onChange={(e) => updatePayment(p.id, { due_day: Number(e.target.value || 1) })} /></td>
                                 <td><input type="month" value={p.valid_from_month || ""} onChange={(e) => updatePayment(p.id, { valid_from_month: e.target.value || null })} /></td>
-                                <td><input type="month" value={p.valid_to_month || ""} onChange={(e) => updatePayment(p.id, { valid_to_month: e.target.value || null })} /></td>
                                 <td><button type="button" className="iconDelete mini" aria-label={`Удалить ${p.title}`} onClick={() => deletePayment(p.id)}>×</button></td>
                               </tr>
                             ))}
@@ -1515,7 +1514,7 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
                         <table className="settingsCompactTable creditTable">
                           <thead>
                             <tr>
-                              <th>on</th><th>Название</th><th>Статья</th><th>Сумма</th><th>День</th><th>Всего мес.</th><th>Оплачено</th><th>С</th><th>До</th><th></th>
+                              <th>on</th><th>Название</th><th>Статья</th><th>Сумма</th><th>День</th><th>Всего мес.</th><th>Оплачено</th><th>С</th><th></th>
                             </tr>
                           </thead>
                           <tbody>
@@ -1529,11 +1528,10 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
                                 <td><input type="number" min="0" value={p.total_months} onChange={(e) => updatePayment(p.id, { total_months: Number(e.target.value || 0) })} /></td>
                                 <td><input type="number" min="0" value={p.paid_months} onChange={(e) => updatePayment(p.id, { paid_months: Number(e.target.value || 0) })} /></td>
                                 <td><input type="month" value={p.valid_from_month || ""} onChange={(e) => updatePayment(p.id, { valid_from_month: e.target.value || null })} /></td>
-                                <td><input type="month" value={p.valid_to_month || ""} onChange={(e) => updatePayment(p.id, { valid_to_month: e.target.value || null })} /></td>
                                 <td><button type="button" className="iconDelete mini" aria-label={`Удалить ${p.title}`} onClick={() => deletePayment(p.id)}>×</button></td>
                               </tr>
                             ))}
-                            {!creditPayments.length && <tr><td colSpan={10}><div className="settingsEmpty slim">Кредитов пока нет.</div></td></tr>}
+                            {!creditPayments.length && <tr><td colSpan={9}><div className="settingsEmpty slim">Кредитов пока нет.</div></td></tr>}
                           </tbody>
                         </table>
                       </div>

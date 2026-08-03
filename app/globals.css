@@ -23,7 +23,10 @@ body {
   min-height: 100%;
   background: radial-gradient(circle at 10% 0%, #ffffff 0, #f5f8ff 38%, var(--bg) 100%);
   color: var(--text);
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  font-family: "Segoe UI Variable Text", "Segoe UI", Arial, sans-serif;
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 button,
@@ -64,7 +67,7 @@ button {
   color: #fff;
   display: grid;
   place-items: center;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .loginCard h1 {
@@ -83,7 +86,7 @@ label {
   gap: 6px;
   color: var(--muted);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 input,
@@ -104,7 +107,7 @@ select {
   border-radius: 12px;
   background: #fff;
   color: var(--text);
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .primaryBtn,
@@ -159,7 +162,7 @@ select {
 
 .slim-title {
   font-size: 17px;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .slim-sub {
@@ -221,7 +224,7 @@ select {
 .summaryCard span {
   color: var(--muted);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .summaryCard.income b {
@@ -267,7 +270,7 @@ select {
 .hint {
   color: var(--muted);
   font-size: 12px;
-  font-weight: 750;
+  font-weight: 600;
 }
 
 .panel-tools {
@@ -294,7 +297,7 @@ select {
   background: #f8fafc;
   color: var(--muted);
   font-size: 11px;
-  font-weight: 900;
+  font-weight: 700;
   border-bottom: 1px solid var(--line);
 }
 
@@ -349,7 +352,7 @@ select {
 .checkcell input:checked + span::after {
   content: "✓";
   color: #fff;
-  font-weight: 900;
+  font-weight: 700;
   font-size: 14px;
 }
 
@@ -367,7 +370,7 @@ select {
   padding: 0 8px;
   border-radius: 8px;
   font-size: 10px;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .tag.income {
@@ -400,7 +403,7 @@ select {
   padding: 0 7px;
   border-radius: 999px;
   font-size: 9px;
-  font-weight: 900;
+  font-weight: 700;
   font-style: normal;
   white-space: nowrap;
   text-transform: uppercase;
@@ -426,7 +429,7 @@ select {
 
 .amount {
   text-align: right;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .amount.income {
@@ -453,7 +456,7 @@ select {
   border-radius: 8px;
   background: #fff;
   color: var(--muted);
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .delete {
@@ -469,7 +472,7 @@ select {
   background: #f1f5f9;
   color: var(--muted);
   font-size: 10px;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .opgroup {
@@ -493,12 +496,12 @@ select {
   border-radius: 8px;
   background: #fff;
   color: #2853c9;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .groupTitle {
   font-size: 14px;
-  font-weight: 900;
+  font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -506,7 +509,7 @@ select {
 
 .groupMeta {
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 700;
   color: #526079;
   white-space: nowrap;
 }
@@ -545,7 +548,7 @@ select {
 }
 
 .matrix th {
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .matrix .corner,
@@ -578,7 +581,7 @@ select {
 .matrix .strong th,
 .matrix .strong td {
   background: #eef4ff;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .matrix .light {
@@ -607,7 +610,7 @@ select {
   border-radius: 12px;
   background: #fff;
   color: var(--muted);
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .modal {
@@ -638,7 +641,14 @@ select {
 }
 
 .settingsModal {
-  width: min(1320px, 100%);
+  width: min(1180px, calc(100vw - 32px));
+  height: min(840px, calc(100vh - 32px));
+  max-height: calc(100vh - 32px);
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+  grid-template-rows: auto minmax(0, 1fr);
+  border-radius: 20px;
 }
 
 .modal-head {
@@ -649,15 +659,36 @@ select {
 
 .modal-head h3 {
   margin: 0;
+  font-size: 18px;
+  line-height: 1.25;
 }
 
 .modal-head button {
   width: 34px;
   height: 34px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 10px;
   background: #fff;
   font-size: 20px;
+  line-height: 1;
+}
+
+.settingsModalHead {
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+}
+
+.settingsModalHead > div {
+  min-width: 0;
+}
+
+.settingsModalHead p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 500;
 }
 
 .formgrid,
@@ -677,61 +708,254 @@ select {
   gap: 8px;
 }
 
-.tabs {
-  display: flex;
+.settingsLayout {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+}
+
+.settingsNav {
+  min-width: 0;
+  padding: 14px;
+  border-right: 1px solid var(--line);
+  background: #f7f9fc;
+  display: grid;
+  align-content: start;
   gap: 6px;
-  overflow: auto;
 }
 
-.tabs button {
-  height: 34px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: #fff;
+.settingsNav button {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: #475569;
   padding: 0 12px;
-  font-weight: 850;
-  white-space: nowrap;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
 }
 
-.tabs button.active {
+.settingsNav button:hover {
+  background: #eef3fa;
+}
+
+.settingsNav button.active {
   background: #172033;
   color: #fff;
   border-color: #172033;
 }
 
-.settingsList {
+.settingsContent {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 18px 20px 24px;
+  background: #fff;
+}
+
+.settingsSection {
   display: grid;
+  gap: 14px;
+}
+
+.settingsSectionHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.settingsSectionHead h4,
+.categoryColumnHead h5 {
+  margin: 0;
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.3;
+  font-weight: 700;
+}
+
+.settingsSectionHead p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  font-weight: 500;
+}
+
+.settingsGridCards {
+  grid-template-columns: repeat(2, minmax(240px, 1fr));
+}
+
+.settingsGridCards label {
+  min-height: 88px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #f8fafc;
+  align-content: start;
+}
+
+.settingsGridCards label span {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+  font-weight: 400;
+}
+
+.settingsCards {
+  display: grid;
+  gap: 10px;
+}
+
+.settingsItemCard {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, .04);
+}
+
+.settingsItemCard.inactive {
+  opacity: .64;
+  background: #f8fafc;
+}
+
+.settingsItemPrimary {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.8fr) minmax(150px, 1fr) 130px 94px 36px;
+  align-items: end;
   gap: 8px;
 }
 
-.setrow {
+.settingsItemDetails {
   display: grid;
-  align-items: center;
-  gap: 6px;
+  grid-template-columns: repeat(4, minmax(135px, 1fr));
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid #edf1f6;
 }
 
-.setrow.pay {
-  grid-template-columns: minmax(135px, 1.35fr) minmax(105px, 1fr) 88px 78px 126px 126px 60px 70px 70px 56px 32px;
+.settingsItemDetails.paymentDetails {
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
 }
 
-.setrow.income {
-  grid-template-columns: minmax(135px, 1.4fr) minmax(105px, 1fr) 88px 60px minmax(118px, 1.05fr) 126px 126px 56px 32px;
+.settingsItemPrimary label,
+.settingsItemDetails label,
+.categoryRow label {
+  min-width: 0;
 }
 
-.setrow .mini.on {
+.settingsItemPrimary input,
+.settingsItemPrimary select,
+.settingsItemDetails input,
+.settingsItemDetails select {
+  width: 100%;
+}
+
+.stateToggle {
+  height: 38px;
+  border: 1px solid #d7dee9;
+  border-radius: 10px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.stateToggle.on {
+  border-color: #b7e6cf;
   background: var(--green-soft);
   color: var(--green);
 }
 
-.categorySettings {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
+.iconDelete {
+  width: 36px;
+  height: 38px;
+  border: 1px solid #f1c7c3;
+  border-radius: 10px;
+  background: #fff;
+  color: var(--red);
+  font-size: 18px;
+  line-height: 1;
+  font-weight: 600;
 }
 
-.categorySettings > div {
+.iconDelete:hover {
+  background: var(--red-soft);
+}
+
+.settingsEmpty {
+  padding: 26px;
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+  color: var(--muted);
+  text-align: center;
+  font-size: 13px;
+}
+
+.categorySettings {
   display: grid;
-  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.categoryColumn {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #f8fafc;
+  padding: 12px;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.categoryColumnHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.categoryColumnHead h5 {
+  font-size: 15px;
+}
+
+.categoryColumnHead span {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.categoryList {
+  display: grid;
+  gap: 7px;
+}
+
+.categoryRow {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 36px;
+  align-items: center;
+  gap: 7px;
+}
+
+.categoryIndex {
+  color: #94a3b8;
+  font-size: 12px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.categoryRow input {
+  width: 100%;
+  height: 38px;
+  background: #fff;
 }
 
 .importBox {
@@ -755,7 +979,38 @@ select {
 .empty {
   padding: 22px;
   color: var(--muted);
-  font-weight: 750;
+  font-weight: 600;
+}
+
+@media (max-width: 900px) {
+  .settingsModal {
+    width: calc(100vw - 20px);
+    height: calc(100vh - 20px);
+    max-height: calc(100vh - 20px);
+  }
+
+  .settingsLayout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .settingsNav {
+    display: flex;
+    overflow-x: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    padding: 10px 12px;
+  }
+
+  .settingsNav button {
+    width: auto;
+    min-width: max-content;
+    text-align: center;
+  }
+
+  .settingsItemPrimary {
+    grid-template-columns: minmax(0, 1fr) minmax(150px, .8fr) 120px 94px 36px;
+  }
 }
 
 @media (max-width: 1100px) {
@@ -814,10 +1069,63 @@ select {
 
   .formgrid,
   .settingsGrid,
-  .categorySettings,
-  .setrow.pay,
-  .setrow.income {
+  .categorySettings {
     grid-template-columns: 1fr;
+  }
+
+  .settingsContent {
+    padding: 14px;
+  }
+
+  .settingsSectionHead {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settingsSectionHead .btn {
+    width: 100%;
+  }
+
+  .settingsItemPrimary {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .settingsItemPrimary .fieldTitle {
+    grid-column: 1 / -1;
+  }
+
+  .settingsItemPrimary .stateToggle {
+    width: 100%;
+  }
+
+  .settingsItemDetails,
+  .settingsItemDetails.paymentDetails {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .settingsModalHead {
+    padding: 14px;
+  }
+
+  .settingsModalHead p {
+    display: none;
+  }
+
+  .settingsGridCards,
+  .settingsItemPrimary,
+  .settingsItemDetails,
+  .settingsItemDetails.paymentDetails {
+    grid-template-columns: 1fr;
+  }
+
+  .settingsItemPrimary .fieldTitle {
+    grid-column: auto;
+  }
+
+  .settingsItemPrimary .iconDelete {
+    width: 100%;
   }
 }
 
@@ -836,7 +1144,7 @@ select {
   border-radius: 14px;
   background: rgba(255,255,255,.88);
   color: var(--muted);
-  font-weight: 900;
+  font-weight: 700;
   white-space: nowrap;
 }
 
@@ -902,7 +1210,7 @@ select {
   padding: 0 10px;
   border-radius: 999px;
   font-size: 11px;
-  font-weight: 900;
+  font-weight: 700;
   white-space: nowrap;
 }
 
@@ -932,7 +1240,7 @@ select {
   color: #1e3a8a;
   padding: 10px 12px;
   border-radius: 14px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .scenarioBar {
@@ -960,7 +1268,7 @@ select {
 .autoBalanceBox small {
   color: #28725b;
   font-size: 11px;
-  font-weight: 850;
+  font-weight: 700;
 }
 
 .autoBalanceBox b {
@@ -989,7 +1297,7 @@ select {
 .kzMonthTotals span {
   color: var(--muted);
   font-size: 11px;
-  font-weight: 850;
+  font-weight: 700;
 }
 
 .plannerKpis b {
@@ -1132,7 +1440,7 @@ select {
   margin: 0;
   color: var(--muted);
   font-size: 11px;
-  font-weight: 750;
+  font-weight: 600;
   line-height: 1.4;
 }
 
@@ -1166,7 +1474,7 @@ select {
 .plannerMatrix th {
   background: #f8fafc;
   color: var(--muted);
-  font-weight: 900;
+  font-weight: 700;
   white-space: nowrap;
 }
 
@@ -1202,7 +1510,7 @@ select {
 .sourceTable input:disabled {
   background: #eef4ff;
   color: #3154b8;
-  font-weight: 850;
+  font-weight: 700;
 }
 
 .amountEditor {
@@ -1243,7 +1551,7 @@ select {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fff;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .plannerMatrix th,
@@ -1276,20 +1584,20 @@ select {
 .plannerMatrix .strong th,
 .plannerMatrix .strong td {
   background: #eef4ff;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .plannerMatrix .section th,
 .plannerMatrix .section td {
   background: #f8fafc;
-  font-weight: 850;
+  font-weight: 700;
 }
 
 .plannerMatrix .countrySection th,
 .plannerMatrix .countrySection td {
   background: #172033;
   color: #fff;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .plannerMatrix .countrySection.synced th,
@@ -1301,7 +1609,7 @@ select {
 .plannerMatrix .detailRow th {
   padding-left: 18px;
   color: var(--muted);
-  font-weight: 750;
+  font-weight: 600;
 }
 
 .plannerMatrix .detailRow td {
@@ -1311,7 +1619,7 @@ select {
 .badCell {
   background: #fff1f0 !important;
   color: var(--red) !important;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 @media (max-width: 1320px) {
@@ -1362,7 +1670,7 @@ select {
 .matrixCurrencyTools > span {
   color: var(--muted);
   font-size: 11px;
-  font-weight: 850;
+  font-weight: 700;
   white-space: nowrap;
 }
 
@@ -1382,7 +1690,7 @@ select {
   background: transparent;
   color: var(--muted);
   font-size: 15px;
-  font-weight: 950;
+  font-weight: 700;
 }
 
 .currencyToggle button.active {
@@ -1394,7 +1702,7 @@ select {
 .sourceTable select:disabled {
   background: #eef4ff;
   color: #3154b8;
-  font-weight: 850;
+  font-weight: 700;
   opacity: 1;
 }
 

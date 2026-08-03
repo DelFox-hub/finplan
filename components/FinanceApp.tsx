@@ -113,10 +113,10 @@ const freqMonths: Record<Frequency, number> = {
 };
 
 const freqLabels: Record<Frequency, string> = {
-  monthly: "ежемес.",
-  quarterly: "квартал",
-  halfyear: "полгода",
-  yearly: "год"
+  monthly: "Ежемесячно",
+  quarterly: "Раз в квартал",
+  halfyear: "Раз в полгода",
+  yearly: "Раз в год"
 };
 
 function pad(n: number) {
@@ -745,12 +745,10 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
   }
 
   async function addCategory(kind: Kind) {
-    const name = prompt(kind === "expense" ? "Новая статья расходов" : "Новая статья доходов");
-    if (!name?.trim()) return;
-
     const table = kind === "expense" ? "expense_categories" : "income_categories";
     const list = kind === "expense" ? expenseCategories : incomeCategories;
-    const { data, error } = await supabase.from(table).insert({ user_id: userId, name: name.trim(), sort_order: nextSortOrder(list) }).select("*").single();
+    const name = kind === "expense" ? "Новая статья расходов" : "Новая статья доходов";
+    const { data, error } = await supabase.from(table).insert({ user_id: userId, name, sort_order: nextSortOrder(list) }).select("*").single();
 
     if (error) {
       flash(error.message);
@@ -761,12 +759,52 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
     else setIncomeCategories((prev) => [...prev, data]);
   }
 
-  async function updateCategory(kind: Kind, id: string, name: string) {
-    const table = kind === "expense" ? "expense_categories" : "income_categories";
-    const { error } = await supabase.from(table).update({ name }).eq("user_id", userId).eq("id", id);
-    if (error) flash(error.message);
+  function editCategoryLocal(kind: Kind, id: string, name: string) {
     if (kind === "expense") setExpenseCategories((prev) => prev.map((x) => (x.id === id ? { ...x, name } : x)));
     else setIncomeCategories((prev) => prev.map((x) => (x.id === id ? { ...x, name } : x)));
+  }
+
+  async function saveCategory(kind: Kind, id: string, name: string) {
+    const cleanName = name.trim();
+    if (!cleanName) {
+      flash("Название статьи не может быть пустым");
+      return;
+    }
+
+    const table = kind === "expense" ? "expense_categories" : "income_categories";
+    const { error } = await supabase.from(table).update({ name: cleanName }).eq("user_id", userId).eq("id", id);
+    if (error) {
+      flash(error.message);
+      return;
+    }
+    editCategoryLocal(kind, id, cleanName);
+  }
+
+  async function deleteCategory(kind: Kind, id: string) {
+    const list = kind === "expense" ? expenseCategories : incomeCategories;
+    const category = list.find((item) => item.id === id);
+    if (!category) return;
+    if (list.length <= 1) {
+      flash("Должна остаться хотя бы одна статья");
+      return;
+    }
+    if (!window.confirm(`Удалить статью «${category.name}»?`)) return;
+
+    const table = kind === "expense" ? "expense_categories" : "income_categories";
+    const { error } = await supabase.from(table).delete().eq("user_id", userId).eq("id", id);
+    if (error) {
+      flash(error.message);
+      return;
+    }
+
+    if (kind === "expense") {
+      setExpenseCategories((prev) => prev.filter((item) => item.id !== id));
+      setPayments((prev) => prev.map((item) => (item.category_id === id ? { ...item, category_id: null } : item)));
+    } else {
+      setIncomeCategories((prev) => prev.filter((item) => item.id !== id));
+      setIncomes((prev) => prev.map((item) => (item.category_id === id ? { ...item, category_id: null } : item)));
+    }
+    setOperations((prev) => prev.map((item) => (item.kind === kind && item.category_id === id ? { ...item, category_id: null } : item)));
   }
 
   async function addPayment() {
@@ -1292,103 +1330,190 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
       {settingsOpen && (
         <div className="modal show">
           <div className="modal-card settingsModal">
-            <div className="modal-head">
-              <h3>Настройки</h3>
-              <button onClick={() => setSettingsOpen(false)}>×</button>
+            <div className="modal-head settingsModalHead">
+              <div>
+                <h3>Настройки дневника</h3>
+                <p>Платежи, доходы и статьи можно менять вручную. Изменения сохраняются автоматически.</p>
+              </div>
+              <button type="button" aria-label="Закрыть настройки" onClick={() => setSettingsOpen(false)}>×</button>
             </div>
 
-            <div className="tabs">
-              <button className={settingsTab === "main" ? "active" : ""} onClick={() => setSettingsTab("main")}>Параметры</button>
-              <button className={settingsTab === "expenses" ? "active" : ""} onClick={() => setSettingsTab("expenses")}>Платежи</button>
-              <button className={settingsTab === "incomes" ? "active" : ""} onClick={() => setSettingsTab("incomes")}>Доходы</button>
-              <button className={settingsTab === "categories" ? "active" : ""} onClick={() => setSettingsTab("categories")}>Статьи</button>
-              <button className={settingsTab === "import" ? "active" : ""} onClick={() => setSettingsTab("import")}>Импорт</button>
+            <div className="settingsLayout">
+              <nav className="settingsNav" aria-label="Разделы настроек">
+                <button className={settingsTab === "main" ? "active" : ""} onClick={() => setSettingsTab("main")}>Параметры</button>
+                <button className={settingsTab === "expenses" ? "active" : ""} onClick={() => setSettingsTab("expenses")}>Платежи</button>
+                <button className={settingsTab === "incomes" ? "active" : ""} onClick={() => setSettingsTab("incomes")}>Доходы</button>
+                <button className={settingsTab === "categories" ? "active" : ""} onClick={() => setSettingsTab("categories")}>Статьи</button>
+                <button className={settingsTab === "import" ? "active" : ""} onClick={() => setSettingsTab("import")}>Импорт</button>
+              </nav>
+
+              <section className="settingsContent">
+                {settingsTab === "main" && (
+                  <div className="settingsSection">
+                    <div className="settingsSectionHead">
+                      <div>
+                        <h4>Основные параметры</h4>
+                        <p>Эти значения задают начало и длину календарного прогноза.</p>
+                      </div>
+                    </div>
+                    <div className="settingsGrid settingsGridCards">
+                      <label>Считать с месяца<input type="month" value={settings.calc_start_month} onChange={(e) => updateSettings({ calc_start_month: e.target.value || currentMonth() })} /></label>
+                      <label>Стартовый остаток<input type="number" value={settings.start_balance} onChange={(e) => updateSettings({ start_balance: Number(e.target.value || 0) })} /></label>
+                      <label>Резервный план дохода<input type="number" value={settings.plan_income} onChange={(e) => updateSettings({ plan_income: Number(e.target.value || 0) })} /><span>Используется только когда регулярные доходы не заведены.</span></label>
+                      <label>Резервный план расходов<input type="number" value={settings.plan_other} onChange={(e) => updateSettings({ plan_other: Number(e.target.value || 0) })} /><span>Используется только когда регулярные расходы не заведены.</span></label>
+                      <label>Горизонт прогноза, лет<input type="number" min="1" max="10" value={settings.years} onChange={(e) => updateSettings({ years: Number(e.target.value || 3) })} /></label>
+                    </div>
+                  </div>
+                )}
+
+                {settingsTab === "expenses" && (
+                  <div className="settingsSection">
+                    <div className="settingsSectionHead">
+                      <div>
+                        <h4>Регулярные платежи</h4>
+                        <p>Каждая строка создаёт расход в календаре на указанный период.</p>
+                      </div>
+                      <button className="btn blue" type="button" onClick={addPayment}>+ Добавить платёж</button>
+                    </div>
+
+                    <div className="settingsCards">
+                      {payments.map((p) => (
+                        <article className={`settingsItemCard ${p.active ? "" : "inactive"}`} key={p.id}>
+                          <div className="settingsItemPrimary">
+                            <label className="fieldTitle">Название<input value={p.title} onChange={(e) => updatePayment(p.id, { title: e.target.value })} /></label>
+                            <label>Статья<select value={p.category_id || ""} onChange={(e) => updatePayment(p.id, { category_id: e.target.value || null })}>
+                              {expenseCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select></label>
+                            <label className="fieldAmount">Сумма<input type="number" value={p.amount} onChange={(e) => updatePayment(p.id, { amount: Number(e.target.value || 0) })} /></label>
+                            <button type="button" className={`stateToggle ${p.active ? "on" : ""}`} onClick={() => updatePayment(p.id, { active: !p.active })}>{p.active ? "Активен" : "Выключен"}</button>
+                            <button type="button" className="iconDelete" aria-label={`Удалить ${p.title}`} onClick={() => deletePayment(p.id)}>×</button>
+                          </div>
+
+                          <div className="settingsItemDetails paymentDetails">
+                            <label>Тип<select value={p.payment_type} onChange={(e) => updatePayment(p.id, { payment_type: e.target.value as PaymentType })}>
+                              <option value="regular">Регулярный платёж</option>
+                              <option value="credit">Кредит / рассрочка</option>
+                            </select></label>
+                            <label>Действует с<input type="month" value={p.valid_from_month || ""} onChange={(e) => updatePayment(p.id, { valid_from_month: e.target.value || null })} /></label>
+                            <label>Действует до<input type="month" value={p.valid_to_month || ""} onChange={(e) => updatePayment(p.id, { valid_to_month: e.target.value || null })} /></label>
+                            <label>День оплаты<input type="number" min="1" max="31" value={p.due_day} onChange={(e) => updatePayment(p.id, { due_day: Number(e.target.value || 1) })} /></label>
+                            {p.payment_type === "credit" && (
+                              <>
+                                <label>Всего месяцев<input type="number" min="0" value={p.total_months} onChange={(e) => updatePayment(p.id, { total_months: Number(e.target.value || 0) })} /></label>
+                                <label>Уже оплачено<input type="number" min="0" value={p.paid_months} onChange={(e) => updatePayment(p.id, { paid_months: Number(e.target.value || 0) })} /></label>
+                              </>
+                            )}
+                          </div>
+                        </article>
+                      ))}
+                      {!payments.length && <div className="settingsEmpty">Регулярных платежей пока нет.</div>}
+                    </div>
+                  </div>
+                )}
+
+                {settingsTab === "incomes" && (
+                  <div className="settingsSection">
+                    <div className="settingsSectionHead">
+                      <div>
+                        <h4>Регулярные доходы</h4>
+                        <p>Зарплата, аванс, премии и подработки попадают в календарь отсюда.</p>
+                      </div>
+                      <button className="btn blue" type="button" onClick={addIncome}>+ Добавить доход</button>
+                    </div>
+
+                    <div className="settingsCards">
+                      {incomes.map((i) => (
+                        <article className={`settingsItemCard ${i.active ? "" : "inactive"}`} key={i.id}>
+                          <div className="settingsItemPrimary">
+                            <label className="fieldTitle">Название<input value={i.title} onChange={(e) => updateIncome(i.id, { title: e.target.value })} /></label>
+                            <label>Статья<select value={i.category_id || ""} onChange={(e) => updateIncome(i.id, { category_id: e.target.value || null })}>
+                              {incomeCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select></label>
+                            <label className="fieldAmount">Сумма<input type="number" value={i.amount} onChange={(e) => updateIncome(i.id, { amount: Number(e.target.value || 0) })} /></label>
+                            <button type="button" className={`stateToggle ${i.active ? "on" : ""}`} onClick={() => updateIncome(i.id, { active: !i.active })}>{i.active ? "Активен" : "Выключен"}</button>
+                            <button type="button" className="iconDelete" aria-label={`Удалить ${i.title}`} onClick={() => deleteIncome(i.id)}>×</button>
+                          </div>
+
+                          <div className="settingsItemDetails incomeDetails">
+                            <label>Частота<select value={i.frequency} onChange={(e) => updateIncome(i.id, { frequency: e.target.value as Frequency })}>
+                              {Object.entries(freqLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                            </select></label>
+                            <label>День поступления<input type="number" min="1" max="31" value={i.due_day} onChange={(e) => updateIncome(i.id, { due_day: Number(e.target.value || 1) })} /></label>
+                            <label>Действует с<input type="month" value={i.valid_from_month || ""} onChange={(e) => updateIncome(i.id, { valid_from_month: e.target.value || null })} /></label>
+                            <label>Действует до<input type="month" value={i.valid_to_month || ""} onChange={(e) => updateIncome(i.id, { valid_to_month: e.target.value || null })} /></label>
+                          </div>
+                        </article>
+                      ))}
+                      {!incomes.length && <div className="settingsEmpty">Регулярных доходов пока нет.</div>}
+                    </div>
+                  </div>
+                )}
+
+                {settingsTab === "categories" && (
+                  <div className="settingsSection">
+                    <div className="settingsSectionHead">
+                      <div>
+                        <h4>Статьи дневника</h4>
+                        <p>Названия полностью ваши: добавляйте, переименовывайте и удаляйте. Сохранение — после выхода из поля.</p>
+                      </div>
+                    </div>
+
+                    <div className="categorySettings">
+                      <section className="categoryColumn">
+                        <div className="categoryColumnHead">
+                          <div><h5>Расходы</h5><span>{expenseCategories.length} статей</span></div>
+                          <button className="btn" type="button" onClick={() => addCategory("expense")}>+ Добавить</button>
+                        </div>
+                        <div className="categoryList">
+                          {expenseCategories.map((c, index) => (
+                            <div className="categoryRow" key={c.id}>
+                              <span className="categoryIndex">{index + 1}</span>
+                              <input value={c.name} onChange={(e) => editCategoryLocal("expense", c.id, e.target.value)} onBlur={(e) => saveCategory("expense", c.id, e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} />
+                              <button type="button" className="iconDelete" aria-label={`Удалить ${c.name}`} onClick={() => deleteCategory("expense", c.id)}>×</button>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+
+                      <section className="categoryColumn">
+                        <div className="categoryColumnHead">
+                          <div><h5>Доходы</h5><span>{incomeCategories.length} статей</span></div>
+                          <button className="btn" type="button" onClick={() => addCategory("income")}>+ Добавить</button>
+                        </div>
+                        <div className="categoryList">
+                          {incomeCategories.map((c, index) => (
+                            <div className="categoryRow" key={c.id}>
+                              <span className="categoryIndex">{index + 1}</span>
+                              <input value={c.name} onChange={(e) => editCategoryLocal("income", c.id, e.target.value)} onBlur={(e) => saveCategory("income", c.id, e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} />
+                              <button type="button" className="iconDelete" aria-label={`Удалить ${c.name}`} onClick={() => deleteCategory("income", c.id)}>×</button>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    </div>
+                  </div>
+                )}
+
+                {settingsTab === "import" && (
+                  <div className="settingsSection">
+                    <div className="settingsSectionHead">
+                      <div>
+                        <h4>Резервная копия</h4>
+                        <p>Экспортируйте текущую базу перед заменой данных.</p>
+                      </div>
+                    </div>
+                    <div className="importBox">
+                      <button type="button" className="btn" onClick={exportData}>Экспорт текущей базы</button>
+                      <label className="fileImport">
+                        Импорт из старого HTML / JSON
+                        <input type="file" accept="application/json,.json" onChange={(e) => importLegacy(e.target.files?.[0] || null)} />
+                      </label>
+                      <p>Импорт заменяет текущие данные. Перед импортом лучше сделать экспорт базы.</p>
+                    </div>
+                  </div>
+                )}
+              </section>
             </div>
-
-            {settingsTab === "main" && (
-              <div className="settingsGrid">
-                <label>Считать с месяца<input type="month" value={settings.calc_start_month} onChange={(e) => updateSettings({ calc_start_month: e.target.value || currentMonth() })} /></label>
-                <label>Стартовый остаток<input type="number" value={settings.start_balance} onChange={(e) => updateSettings({ start_balance: Number(e.target.value || 0) })} /></label>
-                <label>План дохода, если доходы не заведены<input type="number" value={settings.plan_income} onChange={(e) => updateSettings({ plan_income: Number(e.target.value || 0) })} /></label>
-                <label>План расходов, если расходов нет<input type="number" value={settings.plan_other} onChange={(e) => updateSettings({ plan_other: Number(e.target.value || 0) })} /></label>
-                <label>Горизонт, лет<input type="number" min="1" max="10" value={settings.years} onChange={(e) => updateSettings({ years: Number(e.target.value || 3) })} /></label>
-              </div>
-            )}
-
-            {settingsTab === "expenses" && (
-              <div className="settingsList">
-                <button className="btn blue" onClick={addPayment}>+ регулярный платёж</button>
-                {payments.map((p) => (
-                  <div className="setrow pay" key={p.id}>
-                    <input value={p.title} onChange={(e) => updatePayment(p.id, { title: e.target.value })} />
-                    <select value={p.category_id || ""} onChange={(e) => updatePayment(p.id, { category_id: e.target.value || null })}>
-                      {expenseCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
-                    <input type="number" value={p.amount} onChange={(e) => updatePayment(p.id, { amount: Number(e.target.value || 0) })} />
-                    <select value={p.payment_type} onChange={(e) => updatePayment(p.id, { payment_type: e.target.value as PaymentType })}>
-                      <option value="regular">регуляр.</option>
-                      <option value="credit">кредит</option>
-                    </select>
-                    <input type="month" value={p.valid_from_month || ""} onChange={(e) => updatePayment(p.id, { valid_from_month: e.target.value || null })} title="Действует с. Пусто = без ограничения" />
-                    <input type="month" value={p.valid_to_month || ""} onChange={(e) => updatePayment(p.id, { valid_to_month: e.target.value || null })} title="Действует до. Пусто = без ограничения" />
-                    <input type="number" min="1" max="31" value={p.due_day} onChange={(e) => updatePayment(p.id, { due_day: Number(e.target.value || 1) })} />
-                    <input type="number" value={p.total_months} onChange={(e) => updatePayment(p.id, { total_months: Number(e.target.value || 0) })} title="Всего месяцев для кредита" />
-                    <input type="number" value={p.paid_months} onChange={(e) => updatePayment(p.id, { paid_months: Number(e.target.value || 0) })} title="Уже оплачено для кредита" />
-                    <button type="button" className={`mini ${p.active ? "on" : ""}`} onClick={() => updatePayment(p.id, { active: !p.active })}>{p.active ? "on" : "off"}</button>
-                    <button type="button" className="delete" onClick={() => deletePayment(p.id)}>×</button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {settingsTab === "incomes" && (
-              <div className="settingsList">
-                <button className="btn blue" onClick={addIncome}>+ регулярный доход</button>
-                {incomes.map((i) => (
-                  <div className="setrow income" key={i.id}>
-                    <input value={i.title} onChange={(e) => updateIncome(i.id, { title: e.target.value })} />
-                    <select value={i.category_id || ""} onChange={(e) => updateIncome(i.id, { category_id: e.target.value || null })}>
-                      {incomeCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
-                    <input type="number" value={i.amount} onChange={(e) => updateIncome(i.id, { amount: Number(e.target.value || 0) })} />
-                    <input type="number" min="1" max="31" value={i.due_day} onChange={(e) => updateIncome(i.id, { due_day: Number(e.target.value || 1) })} />
-                    <select value={i.frequency} onChange={(e) => updateIncome(i.id, { frequency: e.target.value as Frequency })}>
-                      {Object.entries(freqLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                    </select>
-                    <input type="month" value={i.valid_from_month || ""} onChange={(e) => updateIncome(i.id, { valid_from_month: e.target.value || null })} title="Действует с. Пусто = без ограничения" />
-                    <input type="month" value={i.valid_to_month || ""} onChange={(e) => updateIncome(i.id, { valid_to_month: e.target.value || null })} title="Действует до. Пусто = без ограничения" />
-                    <button type="button" className={`mini ${i.active ? "on" : ""}`} onClick={() => updateIncome(i.id, { active: !i.active })}>{i.active ? "on" : "off"}</button>
-                    <button type="button" className="delete" onClick={() => deleteIncome(i.id)}>×</button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {settingsTab === "categories" && (
-              <div className="categorySettings">
-                <div>
-                  <h4>Расходы</h4>
-                  <button className="btn" onClick={() => addCategory("expense")}>+ статья</button>
-                  {expenseCategories.map((c) => <input key={c.id} value={c.name} onChange={(e) => updateCategory("expense", c.id, e.target.value)} />)}
-                </div>
-                <div>
-                  <h4>Доходы</h4>
-                  <button className="btn" onClick={() => addCategory("income")}>+ статья</button>
-                  {incomeCategories.map((c) => <input key={c.id} value={c.name} onChange={(e) => updateCategory("income", c.id, e.target.value)} />)}
-                </div>
-              </div>
-            )}
-
-            {settingsTab === "import" && (
-              <div className="importBox">
-                <button type="button" className="btn" onClick={exportData}>Экспорт текущей базы</button>
-                <label className="fileImport">
-                  Импорт из старого HTML / JSON
-                  <input type="file" accept="application/json,.json" onChange={(e) => importLegacy(e.target.files?.[0] || null)} />
-                </label>
-                <p>Импорт заменяет текущие данные. Перед импортом лучше сделать экспорт базы.</p>
-              </div>
-            )}
           </div>
         </div>
       )}

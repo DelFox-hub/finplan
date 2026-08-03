@@ -547,14 +547,6 @@ export default function MigrationPlanner({
         <div><span>Расходы всего</span><b>{fmt(summary.totalExpense)}</b></div>
       </div>
 
-      <div className="plannerQuickMeta">
-        <span>Активных сценарных строк: <b>{scenarioMeta.activeCount}</b></span>
-        <span>Доходы: <b>{scenarioMeta.incomeCount}</b></span>
-        <span>Расходы: <b>{scenarioMeta.expenseCount}</b></span>
-        <span>Германия: <b>{scenarioMeta.germanyCount}</b></span>
-        <span>Другое: <b>{scenarioMeta.otherCount}</b></span>
-      </div>
-
       <div className="plannerWorkspace">
         <div className="plannerConditionsColumn">
           <div className="plannerMainGrid compactGrid">
@@ -757,53 +749,63 @@ export default function MigrationPlanner({
               <tr className="strong netRow"><th className="stickyCol">Остаток месяца</th>{data.map((month) => <td className={month.netKzt < 0 ? "badCell" : ""} key={`n-${month.month}`}>{matrixValue(month.netKzt)}</td>)}</tr>
               <tr className="strong cumulativeRow"><th className="stickyCol">Накопительно</th>{data.map((month) => <td className={month.cumulativeKzt < 0 ? "badCell" : ""} key={`c-${month.month}`}>{matrixValue(month.cumulativeKzt)}</td>)}</tr>
 
-              <tr className="countrySection synced"><th className="stickyCol">Казахстан · дневник</th>{data.map((month) => <td key={`kz-title-${month.month}`}></td>)}</tr>
-              <tr className="section incomeSection"><th className="stickyCol">Доходы</th>{data.map((month) => <td key={`kzi-${month.month}`}>{matrixValue(month.byCountry.KZ.incomeKzt)}</td>)}</tr>
-              {forecastView === "detail" && kzIncomeNames.map((name) => (
-                <tr className="detailRow" key={`kzi-name-${name}`}>
-                  <th className="stickyCol">{name}</th>
-                  {data.map((month) => <td key={`kzi-${name}-${month.month}`}>{matrixValue(month.kzIncomeBy[name] || 0)}</td>)}
-                </tr>
-              ))}
-              <tr className="section expenseSection"><th className="stickyCol">Расходы</th>{data.map((month) => <td key={`kze-${month.month}`}>{matrixValue(month.byCountry.KZ.expenseKzt)}</td>)}</tr>
-              {forecastView === "detail" && kzExpenseNames.map((name) => (
-                <tr className="detailRow" key={`kze-name-${name}`}>
-                  <th className="stickyCol">{name}</th>
-                  {data.map((month) => <td key={`kze-${name}-${month.month}`}>{matrixValue(month.kzExpenseBy[name] || 0)}</td>)}
-                </tr>
-              ))}
+              {forecastView === "summary" ? (
+                <>
+                  <tr className="countryNetRow kzNet"><th className="stickyCol">Казахстан · итог</th>{data.map((month) => <td key={`kz-net-${month.month}`}>{matrixValue(month.byCountry.KZ.incomeKzt - month.byCountry.KZ.expenseKzt)}</td>)}</tr>
+                  <tr className="countryNetRow deNet"><th className="stickyCol">Германия · итог</th>{data.map((month) => <td key={`de-net-${month.month}`}>{matrixValue(month.byCountry.DE.incomeKzt - month.byCountry.DE.expenseKzt)}</td>)}</tr>
+                  <tr className="countryNetRow otherNet"><th className="stickyCol">Другое · итог</th>{data.map((month) => <td key={`other-net-${month.month}`}>{matrixValue(month.byCountry.OTHER.incomeKzt - month.byCountry.OTHER.expenseKzt)}</td>)}</tr>
+                </>
+              ) : (
+                <>
+                  <tr className="countrySection synced"><th className="stickyCol">Казахстан · дневник</th>{data.map((month) => <td key={`kz-title-${month.month}`}></td>)}</tr>
+                  <tr className="section incomeSection"><th className="stickyCol">Доходы</th>{data.map((month) => <td key={`kzi-${month.month}`}>{matrixValue(month.byCountry.KZ.incomeKzt)}</td>)}</tr>
+                  {kzIncomeNames.map((name) => (
+                    <tr className="detailRow" key={`kzi-name-${name}`}>
+                      <th className="stickyCol">{name}</th>
+                      {data.map((month) => <td key={`kzi-${name}-${month.month}`}>{matrixValue(month.kzIncomeBy[name] || 0)}</td>)}
+                    </tr>
+                  ))}
+                  <tr className="section expenseSection"><th className="stickyCol">Расходы</th>{data.map((month) => <td key={`kze-${month.month}`}>{matrixValue(month.byCountry.KZ.expenseKzt)}</td>)}</tr>
+                  {kzExpenseNames.map((name) => (
+                    <tr className="detailRow" key={`kze-name-${name}`}>
+                      <th className="stickyCol">{name}</th>
+                      {data.map((month) => <td key={`kze-${name}-${month.month}`}>{matrixValue(month.kzExpenseBy[name] || 0)}</td>)}
+                    </tr>
+                  ))}
 
-              <tr className="countrySection"><th className="stickyCol">Германия</th>{data.map((month) => <td key={`de-title-${month.month}`}></td>)}</tr>
-              <tr className="section incomeSection"><th className="stickyCol">Доходы</th>{data.map((month) => <td key={`dei-${month.month}`}>{matrixValue(month.byCountry.DE.incomeKzt)}</td>)}</tr>
-              {forecastView === "detail" && scenarioRowsByCountry("DE", "income").map((row) => (
-                <tr className="detailRow" key={`de-income-${row.id}`}>
-                  <th className="stickyCol">{row.title}</th>
-                  {data.map((month) => <td key={`de-income-${row.id}-${month.month}`}>{matrixValue(month.scenarioByRowKzt[row.id] || 0)}</td>)}
-                </tr>
-              ))}
-              <tr className="section expenseSection"><th className="stickyCol">Расходы</th>{data.map((month) => <td key={`dee-${month.month}`}>{matrixValue(month.byCountry.DE.expenseKzt)}</td>)}</tr>
-              {forecastView === "detail" && scenarioRowsByCountry("DE", "expense").map((row) => (
-                <tr className="detailRow" key={`de-expense-${row.id}`}>
-                  <th className="stickyCol">{row.title}</th>
-                  {data.map((month) => <td key={`de-expense-${row.id}-${month.month}`}>{matrixValue(month.scenarioByRowKzt[row.id] || 0)}</td>)}
-                </tr>
-              ))}
+                  <tr className="countrySection"><th className="stickyCol">Германия</th>{data.map((month) => <td key={`de-title-${month.month}`}></td>)}</tr>
+                  <tr className="section incomeSection"><th className="stickyCol">Доходы</th>{data.map((month) => <td key={`dei-${month.month}`}>{matrixValue(month.byCountry.DE.incomeKzt)}</td>)}</tr>
+                  {scenarioRowsByCountry("DE", "income").map((row) => (
+                    <tr className="detailRow" key={`de-income-${row.id}`}>
+                      <th className="stickyCol">{row.title}</th>
+                      {data.map((month) => <td key={`de-income-${row.id}-${month.month}`}>{matrixValue(month.scenarioByRowKzt[row.id] || 0)}</td>)}
+                    </tr>
+                  ))}
+                  <tr className="section expenseSection"><th className="stickyCol">Расходы</th>{data.map((month) => <td key={`dee-${month.month}`}>{matrixValue(month.byCountry.DE.expenseKzt)}</td>)}</tr>
+                  {scenarioRowsByCountry("DE", "expense").map((row) => (
+                    <tr className="detailRow" key={`de-expense-${row.id}`}>
+                      <th className="stickyCol">{row.title}</th>
+                      {data.map((month) => <td key={`de-expense-${row.id}-${month.month}`}>{matrixValue(month.scenarioByRowKzt[row.id] || 0)}</td>)}
+                    </tr>
+                  ))}
 
-              <tr className="countrySection"><th className="stickyCol">Другое</th>{data.map((month) => <td key={`other-title-${month.month}`}></td>)}</tr>
-              <tr className="section incomeSection"><th className="stickyCol">Доходы</th>{data.map((month) => <td key={`oi-${month.month}`}>{matrixValue(month.byCountry.OTHER.incomeKzt)}</td>)}</tr>
-              {forecastView === "detail" && scenarioRowsByCountry("OTHER", "income").map((row) => (
-                <tr className="detailRow" key={`other-income-${row.id}`}>
-                  <th className="stickyCol">{row.title}</th>
-                  {data.map((month) => <td key={`other-income-${row.id}-${month.month}`}>{matrixValue(month.scenarioByRowKzt[row.id] || 0)}</td>)}
-                </tr>
-              ))}
-              <tr className="section expenseSection"><th className="stickyCol">Расходы</th>{data.map((month) => <td key={`oe-${month.month}`}>{matrixValue(month.byCountry.OTHER.expenseKzt)}</td>)}</tr>
-              {forecastView === "detail" && scenarioRowsByCountry("OTHER", "expense").map((row) => (
-                <tr className="detailRow" key={`other-expense-${row.id}`}>
-                  <th className="stickyCol">{row.title}</th>
-                  {data.map((month) => <td key={`other-expense-${row.id}-${month.month}`}>{matrixValue(month.scenarioByRowKzt[row.id] || 0)}</td>)}
-                </tr>
-              ))}
+                  <tr className="countrySection"><th className="stickyCol">Другое</th>{data.map((month) => <td key={`other-title-${month.month}`}></td>)}</tr>
+                  <tr className="section incomeSection"><th className="stickyCol">Доходы</th>{data.map((month) => <td key={`oi-${month.month}`}>{matrixValue(month.byCountry.OTHER.incomeKzt)}</td>)}</tr>
+                  {scenarioRowsByCountry("OTHER", "income").map((row) => (
+                    <tr className="detailRow" key={`other-income-${row.id}`}>
+                      <th className="stickyCol">{row.title}</th>
+                      {data.map((month) => <td key={`other-income-${row.id}-${month.month}`}>{matrixValue(month.scenarioByRowKzt[row.id] || 0)}</td>)}
+                    </tr>
+                  ))}
+                  <tr className="section expenseSection"><th className="stickyCol">Расходы</th>{data.map((month) => <td key={`oe-${month.month}`}>{matrixValue(month.byCountry.OTHER.expenseKzt)}</td>)}</tr>
+                  {scenarioRowsByCountry("OTHER", "expense").map((row) => (
+                    <tr className="detailRow" key={`other-expense-${row.id}`}>
+                      <th className="stickyCol">{row.title}</th>
+                      {data.map((month) => <td key={`other-expense-${row.id}-${month.month}`}>{matrixValue(month.scenarioByRowKzt[row.id] || 0)}</td>)}
+                    </tr>
+                  ))}
+                </>
+              )}
             </tbody>
           </table>
         </div>

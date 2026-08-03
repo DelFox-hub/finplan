@@ -1920,13 +1920,13 @@ select {
 
 /* Relocation planner */
 .relocationPanel {
-  background: rgba(255, 255, 255, .94);
-  border: 1px solid var(--line);
-  border-radius: 22px;
-  box-shadow: var(--shadow);
-  padding: 16px;
+  background: linear-gradient(180deg, rgba(255,255,255,.96) 0%, rgba(251,252,254,.96) 100%);
+  border: 1px solid #e5ebf4;
+  border-radius: 24px;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, .06);
+  padding: 18px;
   display: grid;
-  gap: 12px;
+  gap: 14px;
   min-width: 0;
 }
 
@@ -2009,12 +2009,12 @@ select {
 
 .scenarioBar {
   display: grid;
-  grid-template-columns: repeat(4, minmax(140px, 1fr)) minmax(220px, 1.2fr);
-  gap: 10px;
-  padding: 12px;
+  grid-template-columns: repeat(4, minmax(140px, 1fr)) minmax(240px, 1.15fr);
+  gap: 12px;
+  padding: 14px;
   border: 1px solid #e8edf5;
-  border-radius: 18px;
-  background: linear-gradient(180deg, #fbfcfe 0%, #f8fafc 100%);
+  border-radius: 20px;
+  background: linear-gradient(180deg, #fcfdff 0%, #f7fafe 100%);
 }
 
 .autoBalanceBox {
@@ -2041,21 +2041,19 @@ select {
 }
 
 .plannerKpis {
-  display: flex;
-  gap: 8px;
-  overflow: auto;
-  padding-bottom: 2px;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .plannerKpis > div {
-  min-width: 155px;
-  padding: 9px 11px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
+  min-width: 0;
+  padding: 12px 13px;
+  border: 1px solid #e6ebf3;
+  border-radius: 16px;
   background: #fff;
   display: grid;
-  gap: 2px;
-  flex: 0 0 auto;
+  gap: 4px;
 }
 
 .plannerKpis span,
@@ -2108,8 +2106,8 @@ select {
 
 .plannerWorkspace {
   display: grid;
-  grid-template-columns: minmax(0, 1.02fr) minmax(440px, .98fr);
-  gap: 12px;
+  grid-template-columns: minmax(0, 1.06fr) minmax(420px, .94fr);
+  gap: 14px;
   align-items: start;
 }
 
@@ -2143,15 +2141,15 @@ select {
 .plannerCard,
 .plannerSources,
 .forecastBlock {
-  border: 1px solid #e8edf5;
-  border-radius: 18px;
+  border: 1px solid #e7edf5;
+  border-radius: 20px;
   background: #fff;
-  padding: 13px;
+  padding: 15px;
   display: grid;
   gap: 12px;
   min-width: 0;
   align-content: start;
-  box-shadow: 0 8px 20px rgba(15, 23, 42, .04);
+  box-shadow: 0 10px 26px rgba(15, 23, 42, .04);
 }
 
 .kzSyncCard {
@@ -2278,9 +2276,9 @@ select {
 .sourceTableWrap,
 .plannerMatrixWrap {
   overflow: auto;
-  border: 1px solid #e8edf5;
+  border: 1px solid #e7edf5;
   border-radius: 16px;
-  max-height: 72vh;
+  max-height: 68vh;
   background: #fff;
 }
 
@@ -2654,3 +2652,22 @@ select {
 .currencyToggle { display:inline-flex; align-items:center; border:1px solid #d8e1ef; border-radius: 12px; overflow:hidden; background:#f8fafc; }
 .currencyToggle button { height:32px; padding:0 10px; border:0; background:transparent; color:var(--muted); font-weight:700; }
 .currencyToggle button.active { background:#172033; color:#fff; }
+
+.countryNetRow th, .countryNetRow td { background:#f8fafc; font-weight:700; }
+.countryNetRow.kzNet th, .countryNetRow.kzNet td { background:#eefaf4; color:#16734f; }
+.countryNetRow.deNet th, .countryNetRow.deNet td { background:#f4f7ff; color:#2953c8; }
+.countryNetRow.otherNet th, .countryNetRow.otherNet td { background:#fff8ef; color:#9a5a11; }
+.plannerSources .plannerQuickMeta { margin-top: -2px; }
+.sourcesHead { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+.sourcesHead h3, .forecastHead h3, .cardTitleRow h3 { margin:0 0 4px; font-size: 17px; }
+.sourcesHead p, .forecastHead p, .cardTitleRow p { margin:0; color:#6d788a; }
+.sourceTable td, .plannerMatrix td { font-variant-numeric: tabular-nums; }
+.sourceTable tbody tr { height: 42px; }
+.sourceTable tbody tr:hover td { background:#f8fbff; }
+.sourceTable input, .sourceTable select { background:#fff; }
+.plannerMatrix .countrySection th, .plannerMatrix .countrySection td { background:#f2f5fb; color:#172033; font-weight:800; }
+.stickyForecast { top: 14px; }
+
+@media (max-width: 1280px) { .plannerKpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } .plannerWorkspace { grid-template-columns: 1fr; } .stickyForecast { position: static; } }
+@media (max-width: 900px) { .plannerKpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .plannerMainGrid { grid-template-columns: 1fr; } .scenarioBar { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 640px) { .scenarioBar { grid-template-columns: 1fr; } .plannerKpis { grid-template-columns: 1fr; } .sourcesHead { flex-direction: column; } }

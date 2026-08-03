@@ -287,6 +287,10 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [mainTab, setMainTab] = useState<"diary" | "relocation">("diary");
   const [settingsTab, setSettingsTab] = useState<"main" | "expenses" | "incomes" | "categories" | "import">("expenses");
+  const [saveState, setSaveState] = useState<{ status: "saved" | "saving" | "error"; message: string }>({
+    status: "saved",
+    message: "Все изменения сохранены"
+  });
   const [opModalOpen, setOpModalOpen] = useState(false);
   const [editingOperationId, setEditingOperationId] = useState<string | null>(null);
   const [opForm, setOpForm] = useState({
@@ -1414,11 +1418,11 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
 
             <div className="settingsLayout">
               <nav className="settingsNav" aria-label="Разделы настроек">
-                <button className={settingsTab === "main" ? "active" : ""} onClick={() => setSettingsTab("main")}>Параметры</button>
-                <button className={settingsTab === "expenses" ? "active" : ""} onClick={() => setSettingsTab("expenses")}>Платежи</button>
-                <button className={settingsTab === "incomes" ? "active" : ""} onClick={() => setSettingsTab("incomes")}>Доходы</button>
-                <button className={settingsTab === "categories" ? "active" : ""} onClick={() => setSettingsTab("categories")}>Статьи</button>
-                <button className={settingsTab === "import" ? "active" : ""} onClick={() => setSettingsTab("import")}>Импорт</button>
+                <button type="button" className={settingsTab === "main" ? "active" : ""} onClick={() => setSettingsTab("main")}>Параметры</button>
+                <button type="button" className={settingsTab === "expenses" ? "active" : ""} onClick={() => setSettingsTab("expenses")}>Платежи</button>
+                <button type="button" className={settingsTab === "incomes" ? "active" : ""} onClick={() => setSettingsTab("incomes")}>Доходы</button>
+                <button type="button" className={settingsTab === "categories" ? "active" : ""} onClick={() => setSettingsTab("categories")}>Статьи</button>
+                <button type="button" className={settingsTab === "import" ? "active" : ""} onClick={() => setSettingsTab("import")}>Импорт</button>
               </nav>
 
               <section className="settingsContent">

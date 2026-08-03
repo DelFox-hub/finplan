@@ -827,11 +827,15 @@ select {
   width: min(560px, 100%);
 }
 
+.settingsOverlay {
+  padding: 4px;
+}
+
 .settingsModal {
-  width: min(1580px, calc(100vw - 16px));
-  height: calc(100vh - 16px);
+  width: 100%;
+  height: 100%;
   max-width: none;
-  max-height: calc(100vh - 16px);
+  max-height: none;
   padding: 0;
   gap: 0;
   overflow: hidden;
@@ -959,7 +963,8 @@ select {
 .settingsLayout {
   min-height: 0;
   display: grid;
-  grid-template-columns: 168px minmax(0, 1fr);
+  grid-template-columns: 156px minmax(0, 1fr);
+  width: 100%;
 }
 
 .settingsNav {
@@ -996,6 +1001,7 @@ select {
 }
 
 .settingsContent {
+  width: 100%;
   min-width: 0;
   min-height: 0;
   overflow: auto;
@@ -1006,6 +1012,9 @@ select {
 .settingsSection {
   display: grid;
   gap: 14px;
+  width: 100%;
+  min-width: 0;
+  align-items: stretch;
 }
 
 .settingsHeadActions {
@@ -1022,6 +1031,9 @@ select {
 }
 
 .settingsTableCard {
+  width: 100%;
+  min-width: 0;
+  justify-self: stretch;
   border: 1px solid var(--line);
   border-radius: 16px;
   background: #fff;
@@ -1051,6 +1063,8 @@ select {
 }
 
 .settingsCompactTableWrap {
+  width: 100%;
+  min-width: 0;
   overflow-x: hidden;
   overflow-y: auto;
   border: 1px solid var(--line);
@@ -1152,34 +1166,34 @@ select {
 }
 
 
-.paymentsTable th:nth-child(1), .paymentsTable td:nth-child(1) { width: 38px; }
-.paymentsTable th:nth-child(2), .paymentsTable td:nth-child(2) { width: 24%; }
-.paymentsTable th:nth-child(3), .paymentsTable td:nth-child(3) { width: 18%; }
-.paymentsTable th:nth-child(4), .paymentsTable td:nth-child(4) { width: 130px; }
-.paymentsTable th:nth-child(5), .paymentsTable td:nth-child(5) { width: 74px; }
-.paymentsTable th:nth-child(6), .paymentsTable td:nth-child(6) { width: 220px; }
-.paymentsTable th:nth-child(7), .paymentsTable td:nth-child(7) { width: 220px; }
-.paymentsTable th:nth-child(8), .paymentsTable td:nth-child(8) { width: 38px; }
+.paymentsTable th:nth-child(1), .paymentsTable td:nth-child(1) { width: 3%; }
+.paymentsTable th:nth-child(2), .paymentsTable td:nth-child(2) { width: 18%; }
+.paymentsTable th:nth-child(3), .paymentsTable td:nth-child(3) { width: 14%; }
+.paymentsTable th:nth-child(4), .paymentsTable td:nth-child(4) { width: 9%; }
+.paymentsTable th:nth-child(5), .paymentsTable td:nth-child(5) { width: 6%; }
+.paymentsTable th:nth-child(6), .paymentsTable td:nth-child(6) { width: 23%; }
+.paymentsTable th:nth-child(7), .paymentsTable td:nth-child(7) { width: 23%; }
+.paymentsTable th:nth-child(8), .paymentsTable td:nth-child(8) { width: 4%; }
 
-.incomeTable th:nth-child(1), .incomeTable td:nth-child(1) { width: 38px; }
-.incomeTable th:nth-child(2), .incomeTable td:nth-child(2) { width: 20%; }
-.incomeTable th:nth-child(3), .incomeTable td:nth-child(3) { width: 15%; }
-.incomeTable th:nth-child(4), .incomeTable td:nth-child(4) { width: 120px; }
-.incomeTable th:nth-child(5), .incomeTable td:nth-child(5) { width: 150px; }
-.incomeTable th:nth-child(6), .incomeTable td:nth-child(6) { width: 74px; }
-.incomeTable th:nth-child(7), .incomeTable td:nth-child(7) { width: 220px; }
-.incomeTable th:nth-child(8), .incomeTable td:nth-child(8) { width: 220px; }
-.incomeTable th:nth-child(9), .incomeTable td:nth-child(9) { width: 38px; }
+.incomeTable th:nth-child(1), .incomeTable td:nth-child(1) { width: 3%; }
+.incomeTable th:nth-child(2), .incomeTable td:nth-child(2) { width: 15%; }
+.incomeTable th:nth-child(3), .incomeTable td:nth-child(3) { width: 12%; }
+.incomeTable th:nth-child(4), .incomeTable td:nth-child(4) { width: 8%; }
+.incomeTable th:nth-child(5), .incomeTable td:nth-child(5) { width: 11%; }
+.incomeTable th:nth-child(6), .incomeTable td:nth-child(6) { width: 5%; }
+.incomeTable th:nth-child(7), .incomeTable td:nth-child(7) { width: 21%; }
+.incomeTable th:nth-child(8), .incomeTable td:nth-child(8) { width: 21%; }
+.incomeTable th:nth-child(9), .incomeTable td:nth-child(9) { width: 4%; }
 
-.creditTable th:nth-child(1), .creditTable td:nth-child(1) { width: 38px; }
-.creditTable th:nth-child(2), .creditTable td:nth-child(2) { width: 22%; }
-.creditTable th:nth-child(3), .creditTable td:nth-child(3) { width: 16%; }
-.creditTable th:nth-child(4), .creditTable td:nth-child(4) { width: 120px; }
-.creditTable th:nth-child(5), .creditTable td:nth-child(5) { width: 74px; }
-.creditTable th:nth-child(6), .creditTable td:nth-child(6) { width: 106px; }
-.creditTable th:nth-child(7), .creditTable td:nth-child(7) { width: 100px; }
-.creditTable th:nth-child(8), .creditTable td:nth-child(8) { width: 220px; }
-.creditTable th:nth-child(9), .creditTable td:nth-child(9) { width: 38px; }
+.creditTable th:nth-child(1), .creditTable td:nth-child(1) { width: 3%; }
+.creditTable th:nth-child(2), .creditTable td:nth-child(2) { width: 18%; }
+.creditTable th:nth-child(3), .creditTable td:nth-child(3) { width: 14%; }
+.creditTable th:nth-child(4), .creditTable td:nth-child(4) { width: 9%; }
+.creditTable th:nth-child(5), .creditTable td:nth-child(5) { width: 6%; }
+.creditTable th:nth-child(6), .creditTable td:nth-child(6) { width: 8%; }
+.creditTable th:nth-child(7), .creditTable td:nth-child(7) { width: 8%; }
+.creditTable th:nth-child(8), .creditTable td:nth-child(8) { width: 30%; }
+.creditTable th:nth-child(9), .creditTable td:nth-child(9) { width: 4%; }
 
 .creditsSidebar {
   background: #fbfcff;
@@ -1426,9 +1440,9 @@ select {
 
 @media (max-width: 1350px) and (min-width: 901px) {
   .settingsModal {
-    width: calc(100vw - 12px);
-    height: calc(100vh - 12px);
-    max-height: calc(100vh - 12px);
+    width: 100%;
+    height: 100%;
+    max-height: none;
   }
 
   .settingsLayout {

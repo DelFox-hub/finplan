@@ -1446,7 +1446,7 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
       )}
 
       {settingsOpen && (
-        <div className="modal show">
+        <div className="modal show settingsOverlay">
           <div className="modal-card settingsModal">
             <div className="modal-head settingsModalHead">
               <div>

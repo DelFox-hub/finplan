@@ -284,6 +284,7 @@ export default function FinanceApp({ userId, userEmail }: { userId: string; user
   const [incomes, setIncomes] = useState<RecurringIncome[]>([]);
   const [exclusions, setExclusions] = useState<PaymentExclusion[]>([]);
   const [collapsedGroups, setCollapsedGroups] = useState<CollapsedGroup[]>([]);
+  const autoAppliedMonthsRef = useRef("");
 
   const [viewMonth, setViewMonthState] = useState(currentMonth());
   const [opsPage, setOpsPage] = useState(1);

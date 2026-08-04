@@ -2828,3 +2828,136 @@ select {
 .badCell {
   background: #fff4f3 !important;
 }
+
+
+/* relocation planner responsive cleanup */
+.relocationPanel {
+  padding: clamp(12px, 1.4vw, 18px);
+}
+
+.relocationHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.relocationTitleLine {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.plannerToggleBar {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+}
+
+.plannerToggleBar .plannerInfoBtn {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.scenarioBar {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  align-items: stretch;
+}
+
+.autoBalanceBox {
+  min-width: 220px;
+}
+
+.plannerKpis {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+.plannerMainGrid,
+.plannerMainGrid.compactGrid,
+.compactGrid {
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+
+.forecastHead,
+.sourcesHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.matrixCurrencyTools {
+  gap: 8px;
+}
+
+.forecastBlock,
+.plannerSources {
+  gap: 12px;
+}
+
+.sourceTableWrap,
+.plannerMatrixWrap {
+  width: 100%;
+  overflow: auto;
+}
+
+.sourceTable,
+.plannerMatrix {
+  width: max-content;
+  min-width: 100%;
+}
+
+@media (max-width: 1100px) {
+  .relocationHead,
+  .forecastHead,
+  .sourcesHead {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .relocationActions,
+  .sourcesHead > div:last-child,
+  .matrixCurrencyTools {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 760px) {
+  .plannerToggleBar {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+
+  .plannerToggleBar .plannerInfoBtn {
+    flex: 1 1 calc(50% - 8px);
+    justify-content: center;
+  }
+
+  .scenarioBar {
+    grid-template-columns: 1fr;
+  }
+
+  .plannerKpis {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .plannerKpis,
+  .plannerMainGrid,
+  .plannerMainGrid.compactGrid,
+  .compactGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .plannerToggleBar .plannerInfoBtn {
+    flex: 1 1 100%;
+  }
+}

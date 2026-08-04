@@ -574,12 +574,18 @@ export default function MigrationPlanner({
 
       {message && <div className="plannerMessage">{message}</div>}
 
-      <div className="plannerInfoToggles plannerTopToggles">
+      <div className="plannerInfoToggles plannerTopToggles plannerToggleBar">
         <button type="button" className={`plannerInfoBtn ${showScenarioParams ? "active" : ""}`} onClick={() => setShowScenarioParams((v) => !v)}>
           {showScenarioParams ? "Скрыть" : "Показать"} параметры сценария
         </button>
         <button type="button" className={`plannerInfoBtn ${showScenarioSummary ? "active" : ""}`} onClick={() => setShowScenarioSummary((v) => !v)}>
           {showScenarioSummary ? "Скрыть" : "Показать"} сводку сценария
+        </button>
+        <button type="button" className={`plannerInfoBtn ${showKzCard ? "active" : ""}`} onClick={() => setShowKzCard((v) => !v)}>
+          {showKzCard ? "Скрыть" : "Показать"} Казахстан
+        </button>
+        <button type="button" className={`plannerInfoBtn ${showSalaryCard ? "active" : ""}`} onClick={() => setShowSalaryCard((v) => !v)}>
+          {showSalaryCard ? "Скрыть" : "Показать"} расчёт дохода
         </button>
       </div>
 
@@ -609,15 +615,6 @@ export default function MigrationPlanner({
       )}
 
       <div className="plannerWorkspace plannerWorkspaceStacked">
-        <div className="plannerInfoToggles">
-          <button type="button" className={`plannerInfoBtn ${showKzCard ? "active" : ""}`} onClick={() => setShowKzCard((v) => !v)}>
-            {showKzCard ? "Скрыть" : "Показать"} Казахстан
-          </button>
-          <button type="button" className={`plannerInfoBtn ${showSalaryCard ? "active" : ""}`} onClick={() => setShowSalaryCard((v) => !v)}>
-            {showSalaryCard ? "Скрыть" : "Показать"} расчёт дохода
-          </button>
-        </div>
-
         {(showKzCard || showSalaryCard) && (
           <div className="plannerMainGrid compactGrid">
             {showKzCard && <div className="plannerCard compactCard kzSyncCard">

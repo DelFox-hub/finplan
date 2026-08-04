@@ -390,6 +390,8 @@ export default function MigrationPlanner({
   const [dirty, setDirty] = useState(false);
   const [message, setMessage] = useState("");
   const [matrixCurrency, setMatrixCurrency] = useState<Currency>("KZT");
+  const [showIncomeArticles, setShowIncomeArticles] = useState(false);
+  const [showExpenseArticles, setShowExpenseArticles] = useState(false);
   const [germanyViewMonth, setGermanyViewMonth] = useState(currentMonth());
   const [showSalaryCard, setShowSalaryCard] = useState(false);
   const [showScenarioParams, setShowScenarioParams] = useState(false);
@@ -428,7 +430,7 @@ export default function MigrationPlanner({
   useEffect(() => {
     const updatePageSize = () => {
       const width = window.innerWidth;
-      setMatrixPageSize(width < 620 ? 2 : width < 980 ? 4 : 6);
+      setMatrixPageSize(width < 620 ? 4 : width < 980 ? 12 : width < 1400 ? 20 : 24);
     };
     updatePageSize();
     window.addEventListener("resize", updatePageSize);
@@ -1170,15 +1172,41 @@ export default function MigrationPlanner({
                 <tbody>
                   <tr className="strong netRow"><th className="rowhead">Остаток месяца</th>{visibleData.map((m) => <td className={m.netKzt < 0 ? "neg" : ""} key={`net-${m.month}`}>{matrixValue(m.netKzt)}</td>)}</tr>
                   <tr className="strong cumulativeRow"><th className="rowhead">Накопительно</th>{visibleData.map((m) => <td className={m.cumulativeKzt < 0 ? "neg" : ""} key={`bal-${m.month}`}>{matrixValue(m.cumulativeKzt)}</td>)}</tr>
-                  <tr className="section incomeSection"><th className="rowhead">Доходы</th>{visibleData.map((m) => <td key={`inc-${m.month}`}>{matrixValue(m.incomeKzt)}</td>)}</tr>
-                  {incomeCategoryNames.map((name) => (
+                  <tr className="section incomeSection">
+                    <th className="rowhead">
+                      <button
+                        type="button"
+                        className="forecastGroupToggle"
+                        aria-expanded={showIncomeArticles}
+                        onClick={() => setShowIncomeArticles((value) => !value)}
+                      >
+                        <span>{showIncomeArticles ? "−" : "+"}</span>
+                        Доходы
+                      </button>
+                    </th>
+                    {visibleData.map((m) => <td key={`inc-${m.month}`}>{matrixValue(m.incomeKzt)}</td>)}
+                  </tr>
+                  {showIncomeArticles && incomeCategoryNames.map((name) => (
                     <tr className="incomeRow" key={`de-inc-${name}`}>
                       <th className="rowhead light">{name}</th>
                       {visibleData.map((m) => <td key={`de-inc-${name}-${m.month}`}>{matrixValue(m.germanyIncomeBy[name] || 0)}</td>)}
                     </tr>
                   ))}
-                  <tr className="section expenseSection"><th className="rowhead">Расходы</th>{visibleData.map((m) => <td key={`exp-${m.month}`}>{matrixValue(m.expenseKzt)}</td>)}</tr>
-                  {expenseCategoryNames.map((name) => (
+                  <tr className="section expenseSection">
+                    <th className="rowhead">
+                      <button
+                        type="button"
+                        className="forecastGroupToggle"
+                        aria-expanded={showExpenseArticles}
+                        onClick={() => setShowExpenseArticles((value) => !value)}
+                      >
+                        <span>{showExpenseArticles ? "−" : "+"}</span>
+                        Расходы
+                      </button>
+                    </th>
+                    {visibleData.map((m) => <td key={`exp-${m.month}`}>{matrixValue(m.expenseKzt)}</td>)}
+                  </tr>
+                  {showExpenseArticles && expenseCategoryNames.map((name) => (
                     <tr className="expenseRow" key={`de-exp-${name}`}>
                       <th className="rowhead light">{name}</th>
                       {visibleData.map((m) => <td key={`de-exp-${name}-${m.month}`}>{matrixValue(m.germanyExpenseBy[name] || 0)}</td>)}

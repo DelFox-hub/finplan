@@ -2642,37 +2642,48 @@ select {
   }
 }
 
-/* Germany workspace: editable diary on the left, forecast on the right */
+/* Germany workspace: compact diary on the left, forecast on the right */
 .germanyDashboard {
-  grid-template-columns: minmax(390px, .72fr) minmax(760px, 1.65fr);
-  align-items: stretch;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(450px, .82fr) minmax(0, 1.75fr);
+  align-items: start;
   gap: 12px;
 }
 
 .germanyExpensePanel,
 .germanyForecastPanel {
-  height: clamp(520px, 62vh, 680px);
-  min-height: 520px;
-  max-height: 680px;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: auto;
+  max-height: none;
+  align-self: start;
+}
+
+.germanyExpensePanel {
+  grid-template-rows: auto auto;
 }
 
 .germanyExpensePanel .panel-head {
-  min-height: 108px;
-  align-items: stretch;
-  flex-direction: column;
-  justify-content: center;
+  min-height: 64px;
+  padding: 8px 12px;
+  align-items: center;
+  flex-direction: row;
   gap: 8px;
 }
 
 .germanyExpensePanel .diaryPanelTools {
-  width: 100%;
-  margin-left: 0;
-  justify-content: space-between;
+  width: auto;
+  margin-left: auto;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
 }
 
 .germanyExpensePanel .diaryMonthInline {
-  flex: 1 1 auto;
   min-width: 0;
+  padding: 3px 4px;
+  gap: 4px;
 }
 
 .germanyExpensePanel .diaryMonthInline .hint {
@@ -2680,184 +2691,85 @@ select {
 }
 
 .germanyExpensePanel .diaryMonthInline .diaryMonthPickerWrap {
-  width: min(170px, 100%);
-  flex: 1 1 120px;
+  width: 150px;
 }
 
-.germanyExpenseTableBox,
-.germanyForecastBox {
-  height: 100%;
+.germanyExpenseTableBox {
   min-height: 0;
+  height: auto;
+  grid-template-rows: 36px auto 40px;
+}
+
+.germanyExpenseTableBox .tbody {
+  min-height: 0;
+  max-height: min(46vh, 480px);
+  overflow: auto;
 }
 
 .germanyExpenseHead,
 .germanyExpenseRow {
-  grid-template-columns: 30px 90px minmax(125px, 1fr) 72px 112px;
+  display: grid;
+  grid-template-columns: 30px 78px minmax(120px, 1fr) 76px 88px 58px;
+  align-items: center;
   gap: 5px;
   padding: 0 7px;
 }
 
 .germanyExpenseHead {
+  min-height: 36px;
   font-size: 9px;
 }
 
 .germanyExpenseRow {
+  min-height: 44px;
   font-size: 11px;
 }
 
 .germanyExpenseGroup,
-.germanyExpensePeriod {
+.germanyExpensePeriod,
+.germanyExpenseComment span,
+.germanyExpenseRow > .amount {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.germanyExpenseEditTrigger {
+.germanyExpenseComment {
   min-width: 0;
   display: grid;
   gap: 2px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
 }
 
-.germanyExpenseEditTrigger span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.germanyExpenseComment span {
   font-weight: 700;
 }
 
-.germanyExpenseEditTrigger:hover span {
-  text-decoration: underline;
-}
-
-.germanyExpenseAmountCell {
-  min-width: 0;
+.germanyExpenseActions {
   display: flex;
-  align-items: center;
   justify-content: flex-end;
-  gap: 5px;
+  gap: 3px;
 }
 
-.germanyExpenseAmountCell .amount {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.germanyEditIcon,
-.germanyDoneBtn,
-.germanyDeleteBtn {
-  width: 26px;
-  height: 26px;
+.germanyExpenseActions .edit,
+.germanyExpenseActions .delete {
   flex: 0 0 26px;
-  display: inline-grid;
-  place-items: center;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: #fff;
-  color: #526079;
-  font-size: 13px;
-  font-weight: 800;
-  cursor: pointer;
 }
 
-.germanyEditIcon:hover,
-.germanyDoneBtn:hover {
-  border-color: #8ea5d1;
-  background: #eef4ff;
-  color: #244a91;
-}
-
-.germanyDeleteBtn:hover {
-  border-color: #f0aaa3;
-  background: #fff1ef;
-  color: var(--red);
-}
-
-.germanyExpenseEditRow {
-  grid-template-columns: 30px 96px minmax(145px, 1fr) 118px;
+.germanyForecastPanel {
   grid-template-rows: auto auto;
-  align-items: center;
-  min-height: 94px;
-  gap: 6px;
-  padding: 7px;
-  background: #eef4ff !important;
-}
-
-.germanyExpenseEditRow .checkcell {
-  grid-column: 1;
-  grid-row: 1 / 3;
-}
-
-.germanyExpenseEditRow > .germanyInlineControl {
-  grid-column: 2;
-  grid-row: 1;
-}
-
-.germanyInlineTitle {
-  grid-column: 3 / 5;
-  grid-row: 1;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 108px;
-  gap: 5px;
-}
-
-.germanyInlinePeriod {
-  grid-column: 2 / 4;
-  grid-row: 2;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 5px;
-}
-
-.germanyInlineAmount {
-  grid-column: 4;
-  grid-row: 2;
-  display: grid;
-  gap: 5px;
-}
-
-.germanyInlineMoney,
-.germanyInlineActions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.germanyInlineActions {
-  justify-content: flex-end;
-}
-
-.germanyInlineControl {
-  width: 100%;
-  min-width: 0;
-  height: 29px;
-  padding: 0 6px;
-  border: 1px solid #ccd6e6;
-  border-radius: 7px;
-  background: #fff;
-  color: var(--ink);
-  font-size: 10px;
-}
-
-.germanyInlineControl.compact {
-  font-size: 9px;
-}
-
-.germanyInlineControl.currency {
-  width: 42px;
-  flex: 0 0 42px;
-  padding: 0 3px;
 }
 
 .germanyForecastPanel .panel-head {
-  min-height: 78px;
+  min-height: 64px;
+  padding: 8px 12px;
+}
+
+.germanyForecastBox {
+  min-height: 0;
+  height: auto;
+  max-height: min(62vh, 620px);
+  overflow: auto;
 }
 
 .germanyForecastBox .matrix th:not(.corner):not(.rowhead),
@@ -2876,47 +2788,94 @@ select {
   width: 158px;
 }
 
-@media (max-width: 1220px) {
+.germanyExpenseModal {
+  width: min(620px, calc(100vw - 28px));
+}
+
+.germanyExpenseModal .checkLine.wide {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 1280px) {
   .germanyDashboard {
     grid-template-columns: 1fr;
   }
 
   .germanyExpensePanel,
   .germanyForecastPanel {
-    height: 560px;
-    max-height: none;
-  }
-
-  .germanyExpensePanel .panel-head {
-    min-height: 84px;
+    width: 100%;
   }
 
   .germanyExpenseHead,
   .germanyExpenseRow {
-    grid-template-columns: 34px 130px minmax(180px, 1fr) 100px 125px;
+    grid-template-columns: 34px 130px minmax(180px, 1fr) 110px 118px 62px;
+  }
+
+  .germanyForecastBox {
+    max-height: 560px;
   }
 }
 
 @media (max-width: 760px) {
-  .germanyExpenseEditRow {
-    grid-template-columns: 30px minmax(0, 1fr);
-    grid-template-rows: repeat(4, auto);
+  .germanyExpensePanel .panel-head {
+    align-items: stretch;
+    flex-direction: column;
   }
 
-  .germanyExpenseEditRow .checkcell {
+  .germanyExpensePanel .diaryPanelTools {
+    width: 100%;
+    margin-left: 0;
+    justify-content: space-between;
+  }
+
+  .germanyExpensePanel .diaryMonthInline {
+    flex: 1 1 auto;
+  }
+
+  .germanyExpensePanel .diaryMonthInline .diaryMonthPickerWrap {
+    width: min(170px, 100%);
+  }
+
+  .germanyExpenseHead {
+    display: none;
+  }
+
+  .germanyExpenseRow {
+    grid-template-columns: 30px minmax(0, 1fr) 90px 58px;
+    grid-template-rows: auto auto;
+    gap: 4px 6px;
+    padding: 8px;
+  }
+
+  .germanyExpenseRow .checkcell {
     grid-column: 1;
-    grid-row: 1 / 5;
+    grid-row: 1 / 3;
   }
 
-  .germanyExpenseEditRow > .germanyInlineControl,
-  .germanyInlineTitle,
-  .germanyInlinePeriod,
-  .germanyInlineAmount {
+  .germanyExpenseGroup {
     grid-column: 2;
+    grid-row: 1;
   }
 
-  .germanyExpenseEditRow > .germanyInlineControl { grid-row: 1; }
-  .germanyInlineTitle { grid-row: 2; grid-template-columns: 1fr; }
-  .germanyInlinePeriod { grid-row: 3; }
-  .germanyInlineAmount { grid-row: 4; }
+  .germanyExpenseComment {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .germanyExpensePeriod {
+    display: none;
+  }
+
+  .germanyExpenseRow > .amount {
+    grid-column: 3;
+    grid-row: 1 / 3;
+    text-align: right;
+  }
+
+  .germanyExpenseActions {
+    grid-column: 4;
+    grid-row: 1 / 3;
+  }
 }

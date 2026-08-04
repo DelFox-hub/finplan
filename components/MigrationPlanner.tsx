@@ -394,6 +394,7 @@ export default function MigrationPlanner({
   const [showSalaryCard, setShowSalaryCard] = useState(false);
   const [showScenarioParams, setShowScenarioParams] = useState(false);
   const [showScenarioSummary, setShowScenarioSummary] = useState(false);
+  const [showScenarioArticles, setShowScenarioArticles] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "error">("saved");
   const [matrixPage, setMatrixPage] = useState(0);
   const [matrixPageSize, setMatrixPageSize] = useState(6);
@@ -601,6 +602,22 @@ export default function MigrationPlanner({
     setDirty(true);
   }
 
+  function addGermanyExpense() {
+    const row: GermanyRecurringExpense = {
+      id: uuid(),
+      title: "Новый расход Германия",
+      group: defaultGroup("expense"),
+      currency: "EUR",
+      amount: 0,
+      frequency: "monthly",
+      startMonth: germanyViewMonth || plan.startMonth,
+      endMonth: "",
+      active: true
+    };
+
+    updatePlan({ germanyExpenses: [row, ...plan.germanyExpenses] });
+  }
+
   function addRow(kind: RowKind) {
     const row: PlanRow = {
       id: uuid(),
@@ -804,33 +821,13 @@ export default function MigrationPlanner({
         <button type="button" className={`plannerInfoBtn ${showSalaryCard ? "active" : ""}`} onClick={() => setShowSalaryCard((v) => !v)}>
           {showSalaryCard ? "Скрыть" : "Показать"} расчёт дохода
         </button>
+        <button type="button" className={`plannerInfoBtn ${showScenarioArticles ? "active" : ""}`} onClick={() => setShowScenarioArticles((v) => !v)}>
+          {showScenarioArticles ? "Скрыть" : "Показать"} сценарные статьи
+        </button>
+        <button type="button" className="btn blue plannerQuickAdd" onClick={() => { addRow("income"); setShowScenarioArticles(true); }}>+ доход</button>
       </div>
 
-      {showScenarioParams && (
-        <div className="scenarioBar">
-          <label>Начало сценария<MonthPicker value={plan.startMonth} min={diaryStartMonth} onChange={(value) => updateStartMonth(value || diaryStartMonth)} /></label>
-          <label>Горизонт, месяцев<input type="number" min="1" max="120" value={plan.months} onChange={(e) => updatePlan({ months: Number(e.target.value || 1) })} /></label>
-          <label>Курс EUR → KZT<input type="number" min="1" value={plan.eurKzt} onChange={(e) => updatePlan({ eurKzt: Number(e.target.value || 1) })} /></label>
-          <label>Резерв в EUR<input type="number" value={plan.startBalanceEur} onChange={(e) => updatePlan({ startBalanceEur: Number(e.target.value || 0) })} /></label>
-          <div className="autoBalanceBox">
-            <span>Стартовый остаток KZT</span>
-            <b>{fmt(startBalance)}</b>
-            <small>автоматически из дневника</small>
-          </div>
-        </div>
-      )}
-
-      {showScenarioSummary && (
-        <div className="plannerKpis">
-          <div><span>Без ухода в минус</span><b>{summary.safeMonths} мес.</b></div>
-          <div><span>Первый минус</span><b className={summary.firstNegative ? "bad" : "ok"}>{summary.firstNegative ? monthLabel(summary.firstNegative) : "нет"}</b></div>
-          <div><span>Минимальный остаток</span><b className={summary.min < 0 ? "bad" : "ok"}>{fmt(summary.min)}</b></div>
-          <div><span>На конец горизонта</span><b className={summary.endKzt < 0 ? "bad" : "ok"}>{fmt(summary.endKzt)}</b></div>
-          <div><span>Доходы всего</span><b>{fmt(summary.totalIncome)}</b></div>
-          <div><span>Расходы всего</span><b>{fmt(summary.totalExpense)}</b></div>
-        </div>
-      )}
-
+      {showScenarioArticles && (
         <div className="plannerSources plannerDiarySection">
           <div className="sourcesHead">
             <div>
@@ -838,8 +835,8 @@ export default function MigrationPlanner({
               <p>Здесь остаются доходы и разовые сценарные расходы. Регулярные расходы Германии настраиваются в разделе «Германия».</p>
             </div>
             <div>
-              <button type="button" className="btn blue" onClick={() => addRow("income")}>+ доход</button>
-              <button type="button" className="btn" onClick={() => addRow("expense")}>+ расход</button>
+              <button type="button" className="btn blue" onClick={() => { addRow("income"); setShowScenarioArticles(true); }}>+ доход</button>
+              <button type="button" className="btn" onClick={() => { addRow("expense"); setShowScenarioArticles(true); }}>+ расход</button>
             </div>
           </div>
 
@@ -960,6 +957,33 @@ export default function MigrationPlanner({
             ))}
           </div>
         </div>
+      )}
+
+      {showScenarioParams && (
+        <div className="scenarioBar">
+          <label>Начало сценария<MonthPicker value={plan.startMonth} min={diaryStartMonth} onChange={(value) => updateStartMonth(value || diaryStartMonth)} /></label>
+          <label>Горизонт, месяцев<input type="number" min="1" max="120" value={plan.months} onChange={(e) => updatePlan({ months: Number(e.target.value || 1) })} /></label>
+          <label>Курс EUR → KZT<input type="number" min="1" value={plan.eurKzt} onChange={(e) => updatePlan({ eurKzt: Number(e.target.value || 1) })} /></label>
+          <label>Резерв в EUR<input type="number" value={plan.startBalanceEur} onChange={(e) => updatePlan({ startBalanceEur: Number(e.target.value || 0) })} /></label>
+          <div className="autoBalanceBox">
+            <span>Стартовый остаток KZT</span>
+            <b>{fmt(startBalance)}</b>
+            <small>автоматически из дневника</small>
+          </div>
+        </div>
+      )}
+
+      {showScenarioSummary && (
+        <div className="plannerKpis">
+          <div><span>Без ухода в минус</span><b>{summary.safeMonths} мес.</b></div>
+          <div><span>Первый минус</span><b className={summary.firstNegative ? "bad" : "ok"}>{summary.firstNegative ? monthLabel(summary.firstNegative) : "нет"}</b></div>
+          <div><span>Минимальный остаток</span><b className={summary.min < 0 ? "bad" : "ok"}>{fmt(summary.min)}</b></div>
+          <div><span>На конец горизонта</span><b className={summary.endKzt < 0 ? "bad" : "ok"}>{fmt(summary.endKzt)}</b></div>
+          <div><span>Доходы всего</span><b>{fmt(summary.totalIncome)}</b></div>
+          <div><span>Расходы всего</span><b>{fmt(summary.totalExpense)}</b></div>
+        </div>
+      )}
+
 
 
       <div className="plannerWorkspace plannerWorkspaceStacked">
@@ -1006,6 +1030,7 @@ export default function MigrationPlanner({
                   <button className="btn month-btn current" onClick={() => setGermanyViewMonth(plan.startMonth)}>старт</button>
                   <button className="btn month-btn" onClick={() => setGermanyViewMonth(addMonths(germanyViewMonth, 1))}>→</button>
                 </div>
+                <button type="button" className="btn blue" onClick={addGermanyExpense}>+ расход</button>
               </div>
             </div>
 
@@ -1091,6 +1116,7 @@ export default function MigrationPlanner({
             </div>
           </section>
         </div>
+
 
       </div>
     </section>

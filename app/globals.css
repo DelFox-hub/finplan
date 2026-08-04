@@ -3742,9 +3742,18 @@ select {
 }
 
 
-/* requested Germany layout: scenario table first, then expense and forecast stacked */
+/* Germany: scenario articles hidden under top button; main blocks stacked */
+.plannerQuickAdd {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
 .plannerSources {
-  margin-top: 10px;
+  width: 100%;
+  margin-top: 2px;
 }
 
 .plannerWorkspace.plannerWorkspaceStacked {
@@ -3765,12 +3774,12 @@ select {
   min-width: 0;
 }
 
-.germanyExpenseTableBox,
-.germanyForecastBox {
-  min-height: 320px;
+.germanyExpenseTableBox {
+  min-height: 300px;
 }
 
 .germanyForecastBox {
+  min-height: 300px;
   overflow: auto;
 }
 
@@ -3785,10 +3794,6 @@ select {
 
 .germanyExpenseRow {
   min-height: 46px;
-}
-
-.germanyExpenseComment {
-  padding-right: 8px;
 }
 
 @media (max-width: 960px) {

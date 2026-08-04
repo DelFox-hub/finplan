@@ -831,6 +831,137 @@ export default function MigrationPlanner({
         </div>
       )}
 
+        <div className="plannerSources plannerDiarySection">
+          <div className="sourcesHead">
+            <div>
+              <h3>Германия и прочие сценарные статьи</h3>
+              <p>Здесь остаются доходы и разовые сценарные расходы. Регулярные расходы Германии настраиваются в разделе «Германия».</p>
+            </div>
+            <div>
+              <button type="button" className="btn blue" onClick={() => addRow("income")}>+ доход</button>
+              <button type="button" className="btn" onClick={() => addRow("expense")}>+ расход</button>
+            </div>
+          </div>
+
+          <div className="plannerQuickMeta subtle">
+            <span>Активно: <b>{scenarioMeta.activeCount}</b></span>
+            <span>Доходных: <b>{scenarioMeta.incomeCount}</b></span>
+            <span>Расходных: <b>{scenarioMeta.expenseCount}</b></span>
+          </div>
+
+          <div className="scenarioList">
+            <div className="scenarioListHead" aria-hidden="true">
+              <span>on</span>
+              <span>Тип</span>
+              <span>Группа</span>
+              <span>Название</span>
+              <span>Сумма</span>
+              <span>Страна</span>
+              <span>Расчёт</span>
+              <span>Частота</span>
+              <span>Период</span>
+              <span></span>
+            </div>
+            {plan.rows.map((row) => (
+              <div key={row.id} className={`scenarioItem ${row.kind} ${row.active ? "" : "inactive"}`}>
+                <label className="scenarioActive" title="Активность строки">
+                  <input type="checkbox" checked={row.active} onChange={(e) => updateRow(row.id, { active: e.target.checked })} />
+                  <span>on</span>
+                </label>
+
+                <label>
+                  <span>Тип</span>
+                  <select value={row.kind} onChange={(e) => updateRow(row.id, { kind: e.target.value as RowKind })}>
+                    <option value="income">доход</option>
+                    <option value="expense">расход</option>
+                  </select>
+                </label>
+
+                <label>
+                  <span>Группа</span>
+                  <select value={row.group} onChange={(e) => updateRow(row.id, { group: e.target.value })}>
+                    {groupNames(row.kind).map((name) => <option key={name} value={name}>{name}</option>)}
+                  </select>
+                </label>
+
+                <label className="scenarioTitleField">
+                  <span>Название</span>
+                  <input value={row.title} onChange={(e) => updateRow(row.id, { title: e.target.value })} />
+                </label>
+
+                <label className="scenarioAmountField">
+                  <span>Сумма</span>
+                  <div className="amountEditor">
+                    <input
+                      type="number"
+                      value={row.autoSource ? Math.round(effectiveRowAmount(row, partTimeNet.net, mainNet.net)) : row.amount}
+                      disabled={!!row.autoSource}
+                      onChange={(e) => updateRow(row.id, { amount: Number(e.target.value || 0) })}
+                    />
+                    <select
+                      value={effectiveRowCurrency(row)}
+                      disabled={!!row.autoSource}
+                      onChange={(e) => updateRow(row.id, { currency: e.target.value as Currency })}
+                    >
+                      <option value="KZT">₸</option>
+                      <option value="EUR">€</option>
+                    </select>
+                  </div>
+                </label>
+
+                <label>
+                  <span>Страна</span>
+                  <select value={row.country} onChange={(e) => updateRow(row.id, { country: e.target.value as Country })}>
+                    {Object.entries(countries).map(([key, value]) => <option key={key} value={key}>{value}</option>)}
+                  </select>
+                </label>
+
+                <label>
+                  <span>Расчёт</span>
+                  <select
+                    value={row.autoSource || ""}
+                    onChange={(e) => {
+                      const autoSource = e.target.value as PlanRow["autoSource"];
+                      updateRow(row.id, { autoSource, ...(autoSource ? { currency: "EUR" as Currency } : {}) });
+                    }}
+                  >
+                    <option value="">ручная сумма</option>
+                    <option value="partTimeNet">нетто подработка</option>
+                    <option value="mainNet">нетто основная</option>
+                  </select>
+                </label>
+
+                <label>
+                  <span>Частота</span>
+                  <select value={row.frequency} onChange={(e) => updateRow(row.id, { frequency: e.target.value as Frequency })}>
+                    {row.kind === "income" || row.country === "OTHER" ? <>
+                      <option value="monthly">ежемесячно</option>
+                      <option value="quarterly">квартал</option>
+                      <option value="yearly">год</option>
+                    </> : null}
+                    <option value="once">разово</option>
+                  </select>
+                </label>
+
+                <label className="scenarioPeriodField">
+                  <span>Период</span>
+                  <div className="periodEditor">
+                    <MonthPicker value={row.startMonth} onChange={(value) => updateRow(row.id, { startMonth: value || row.startMonth })} />
+                    <span>—</span>
+                    <MonthPicker className="periodEndPicker" value={row.endMonth} min={row.startMonth} nullable onChange={(value) => updateRow(row.id, { endMonth: value || "" })} />
+                  </div>
+                </label>
+
+                <div className="rowTools scenarioRowTools">
+                  <button type="button" title="Дублировать" onClick={() => duplicateRow(row)}>⧉</button>
+                  <button type="button" title="Удалить" onClick={() => deleteRow(row.id)}>×</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+
       <div className="plannerWorkspace plannerWorkspaceStacked">
         {showSalaryCard && (
           <div className="plannerMainGrid compactGrid">
@@ -961,135 +1092,6 @@ export default function MigrationPlanner({
           </section>
         </div>
 
-        <div className="plannerSources plannerDiarySection">
-          <div className="sourcesHead">
-            <div>
-              <h3>Германия и прочие сценарные статьи</h3>
-              <p>Здесь остаются доходы и разовые сценарные расходы. Регулярные расходы Германии настраиваются в разделе «Германия».</p>
-            </div>
-            <div>
-              <button type="button" className="btn blue" onClick={() => addRow("income")}>+ доход</button>
-              <button type="button" className="btn" onClick={() => addRow("expense")}>+ расход</button>
-            </div>
-          </div>
-
-          <div className="plannerQuickMeta subtle">
-            <span>Активно: <b>{scenarioMeta.activeCount}</b></span>
-            <span>Доходных: <b>{scenarioMeta.incomeCount}</b></span>
-            <span>Расходных: <b>{scenarioMeta.expenseCount}</b></span>
-          </div>
-
-          <div className="scenarioList">
-            <div className="scenarioListHead" aria-hidden="true">
-              <span>on</span>
-              <span>Тип</span>
-              <span>Группа</span>
-              <span>Название</span>
-              <span>Сумма</span>
-              <span>Страна</span>
-              <span>Расчёт</span>
-              <span>Частота</span>
-              <span>Период</span>
-              <span></span>
-            </div>
-            {plan.rows.map((row) => (
-              <div key={row.id} className={`scenarioItem ${row.kind} ${row.active ? "" : "inactive"}`}>
-                <label className="scenarioActive" title="Активность строки">
-                  <input type="checkbox" checked={row.active} onChange={(e) => updateRow(row.id, { active: e.target.checked })} />
-                  <span>on</span>
-                </label>
-
-                <label>
-                  <span>Тип</span>
-                  <select value={row.kind} onChange={(e) => updateRow(row.id, { kind: e.target.value as RowKind })}>
-                    <option value="income">доход</option>
-                    <option value="expense">расход</option>
-                  </select>
-                </label>
-
-                <label>
-                  <span>Группа</span>
-                  <select value={row.group} onChange={(e) => updateRow(row.id, { group: e.target.value })}>
-                    {groupNames(row.kind).map((name) => <option key={name} value={name}>{name}</option>)}
-                  </select>
-                </label>
-
-                <label className="scenarioTitleField">
-                  <span>Название</span>
-                  <input value={row.title} onChange={(e) => updateRow(row.id, { title: e.target.value })} />
-                </label>
-
-                <label className="scenarioAmountField">
-                  <span>Сумма</span>
-                  <div className="amountEditor">
-                    <input
-                      type="number"
-                      value={row.autoSource ? Math.round(effectiveRowAmount(row, partTimeNet.net, mainNet.net)) : row.amount}
-                      disabled={!!row.autoSource}
-                      onChange={(e) => updateRow(row.id, { amount: Number(e.target.value || 0) })}
-                    />
-                    <select
-                      value={effectiveRowCurrency(row)}
-                      disabled={!!row.autoSource}
-                      onChange={(e) => updateRow(row.id, { currency: e.target.value as Currency })}
-                    >
-                      <option value="KZT">₸</option>
-                      <option value="EUR">€</option>
-                    </select>
-                  </div>
-                </label>
-
-                <label>
-                  <span>Страна</span>
-                  <select value={row.country} onChange={(e) => updateRow(row.id, { country: e.target.value as Country })}>
-                    {Object.entries(countries).map(([key, value]) => <option key={key} value={key}>{value}</option>)}
-                  </select>
-                </label>
-
-                <label>
-                  <span>Расчёт</span>
-                  <select
-                    value={row.autoSource || ""}
-                    onChange={(e) => {
-                      const autoSource = e.target.value as PlanRow["autoSource"];
-                      updateRow(row.id, { autoSource, ...(autoSource ? { currency: "EUR" as Currency } : {}) });
-                    }}
-                  >
-                    <option value="">ручная сумма</option>
-                    <option value="partTimeNet">нетто подработка</option>
-                    <option value="mainNet">нетто основная</option>
-                  </select>
-                </label>
-
-                <label>
-                  <span>Частота</span>
-                  <select value={row.frequency} onChange={(e) => updateRow(row.id, { frequency: e.target.value as Frequency })}>
-                    {row.kind === "income" || row.country === "OTHER" ? <>
-                      <option value="monthly">ежемесячно</option>
-                      <option value="quarterly">квартал</option>
-                      <option value="yearly">год</option>
-                    </> : null}
-                    <option value="once">разово</option>
-                  </select>
-                </label>
-
-                <label className="scenarioPeriodField">
-                  <span>Период</span>
-                  <div className="periodEditor">
-                    <MonthPicker value={row.startMonth} onChange={(value) => updateRow(row.id, { startMonth: value || row.startMonth })} />
-                    <span>—</span>
-                    <MonthPicker className="periodEndPicker" value={row.endMonth} min={row.startMonth} nullable onChange={(value) => updateRow(row.id, { endMonth: value || "" })} />
-                  </div>
-                </label>
-
-                <div className="rowTools scenarioRowTools">
-                  <button type="button" title="Дублировать" onClick={() => duplicateRow(row)}>⧉</button>
-                  <button type="button" title="Удалить" onClick={() => deleteRow(row.id)}>×</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
     </section>
   );

@@ -3740,3 +3740,68 @@ select {
     font-size: 10px;
   }
 }
+
+
+/* requested Germany layout: scenario table first, then expense and forecast stacked */
+.plannerSources {
+  margin-top: 10px;
+}
+
+.plannerWorkspace.plannerWorkspaceStacked {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+.germanyDashboard {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+.germanyExpensePanel,
+.germanyForecastPanel {
+  width: 100%;
+  min-width: 0;
+}
+
+.germanyExpenseTableBox,
+.germanyForecastBox {
+  min-height: 320px;
+}
+
+.germanyForecastBox {
+  overflow: auto;
+}
+
+.germanyForecastBox .matrix {
+  min-width: 100%;
+}
+
+.germanyExpenseHead,
+.germanyExpenseRow {
+  grid-template-columns: 42px 170px minmax(280px, 1fr) 140px 150px;
+}
+
+.germanyExpenseRow {
+  min-height: 46px;
+}
+
+.germanyExpenseComment {
+  padding-right: 8px;
+}
+
+@media (max-width: 960px) {
+  .germanyExpenseHead,
+  .germanyExpenseRow {
+    grid-template-columns: 34px 130px minmax(180px, 1fr) 110px 120px;
+  }
+}
+
+@media (max-width: 760px) {
+  .germanyExpenseHead,
+  .germanyExpenseRow {
+    grid-template-columns: 28px 100px minmax(140px, 1fr) 90px 100px;
+    gap: 4px;
+  }
+}

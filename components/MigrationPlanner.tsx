@@ -474,6 +474,7 @@ export default function MigrationPlanner({
   const [showScenarioParams, setShowScenarioParams] = useState(false);
   const [showScenarioSummary, setShowScenarioSummary] = useState(false);
   const [showScenarioArticles, setShowScenarioArticles] = useState(false);
+  const [collapsedGermanyGroups, setCollapsedGermanyGroups] = useState<Record<string, boolean>>({});
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "error">("saved");
   const latestPlanRef = useRef(plan);
   const dirtyRef = useRef(false);

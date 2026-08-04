@@ -3495,3 +3495,248 @@ select {
     min-width: 1180px;
   }
 }
+
+
+/* make Germany tab obvious in settings */
+.settingsLayout {
+  grid-template-columns: 176px minmax(0, 1fr);
+}
+
+.settingsNav {
+  gap: 8px;
+}
+
+.settingsNav button {
+  min-height: 38px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.settingsNav button:nth-child(5) {
+  border: 1px solid #d9e3f3;
+  background: #f4f8ff;
+  color: #2346a0;
+}
+
+.settingsNav button:nth-child(5).active {
+  background: #172033;
+  color: #fff;
+  border-color: #172033;
+}
+
+/* Germany settings table closer to spreadsheet */
+.germanyTable {
+  table-layout: fixed;
+  font-size: 11px;
+}
+
+.germanyTable th,
+.germanyTable td {
+  padding: 3px 5px;
+}
+
+.germanyTable thead tr:first-child th {
+  height: 30px;
+}
+
+.germanyTable thead .settingsFilterRow th {
+  top: 30px;
+  height: 34px;
+}
+
+.germanyTable input,
+.germanyTable select {
+  height: 26px;
+  border-radius: 6px;
+  padding: 0 5px;
+  font-size: 11px;
+}
+
+.germanyTable .monthPicker {
+  grid-template-columns: minmax(68px, 1fr) 62px 20px;
+  gap: 4px;
+}
+
+.germanyTable .monthPicker select {
+  height: 26px;
+  font-size: 10px;
+  padding: 0 4px;
+}
+
+.germanyTable .monthPickerClear,
+.germanyTable .monthPickerStub {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+}
+
+.germanyTable .iconDelete.mini {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+}
+
+.germanyTable th:nth-child(1), .germanyTable td:nth-child(1) { width: 5%; }
+.germanyTable th:nth-child(2), .germanyTable td:nth-child(2) { width: 22%; }
+.germanyTable th:nth-child(3), .germanyTable td:nth-child(3) { width: 14%; }
+.germanyTable th:nth-child(4), .germanyTable td:nth-child(4) { width: 10%; }
+.germanyTable th:nth-child(5), .germanyTable td:nth-child(5) { width: 8%; }
+.germanyTable th:nth-child(6), .germanyTable td:nth-child(6) { width: 14%; }
+.germanyTable th:nth-child(7), .germanyTable td:nth-child(7) { width: 12%; }
+.germanyTable th:nth-child(8), .germanyTable td:nth-child(8) { width: 12%; }
+.germanyTable th:nth-child(9), .germanyTable td:nth-child(9) { width: 3%; }
+
+/* planner scenario table more compact and spreadsheet-like */
+.scenarioList {
+  padding: 0 10px 10px;
+}
+
+.scenarioListHead,
+.scenarioItem {
+  gap: 6px;
+}
+
+.scenarioListHead {
+  margin-top: 10px;
+  min-height: 30px;
+  padding: 0 8px;
+  font-size: 10px;
+}
+
+.scenarioItem {
+  padding: 6px 8px;
+}
+
+.scenarioItem input,
+.scenarioItem select {
+  height: 28px;
+  font-size: 11px;
+  border-radius: 8px;
+  padding: 0 5px;
+}
+
+.scenarioItem .amountEditor {
+  grid-template-columns: minmax(72px, 1fr) 44px;
+}
+
+.scenarioItem .periodEditor {
+  gap: 4px;
+}
+
+.scenarioItem .periodEditor .monthPicker {
+  grid-template-columns: minmax(0, 1fr) 64px 20px;
+  gap: 4px;
+}
+
+.scenarioItem .periodEditor .monthPicker select {
+  height: 28px;
+  font-size: 10px;
+  padding: 0 4px;
+}
+
+.scenarioItem .periodEditor .monthPickerClear,
+.scenarioItem .periodEditor .monthPickerStub {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+}
+
+.scenarioRowTools button {
+  width: 26px;
+  height: 26px;
+}
+
+
+/* Germany main screen mirrors Kazakhstan layout */
+.germanyDashboard {
+  display: grid;
+  grid-template-columns: minmax(360px, .95fr) minmax(0, 1.05fr);
+  gap: 12px;
+  min-width: 0;
+}
+
+.germanyExpensePanel,
+.germanyForecastPanel {
+  min-width: 0;
+}
+
+.germanyExpenseHead,
+.germanyExpenseRow {
+  display: grid;
+  grid-template-columns: 32px 130px minmax(160px, 1fr) 92px 120px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+}
+
+.germanyExpenseHead {
+  min-height: 36px;
+}
+
+.germanyExpenseRow {
+  min-height: 42px;
+  border-bottom: 1px solid #eef2f7;
+  font-size: 13px;
+}
+
+.germanyExpenseRow.regular {
+  background: #f8fafc;
+}
+
+.germanyExpenseRow.scenario {
+  background: #f5f8ff;
+}
+
+.germanyExpenseComment {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.germanyExpenseComment em {
+  color: var(--muted);
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.germanyExpenseGroup,
+.germanyExpensePeriod {
+  color: #44516a;
+}
+
+.germanyMiniFooter {
+  justify-content: space-between;
+  padding: 0 14px;
+}
+
+.germanyMiniFooter b {
+  font-size: 12px;
+}
+
+.germanyForecastBox .matrix {
+  min-width: 100%;
+}
+
+.germanyForecastBox .rowhead {
+  min-width: 150px;
+}
+
+@media (max-width: 1100px) {
+  .germanyDashboard {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .germanyExpenseHead,
+  .germanyExpenseRow {
+    grid-template-columns: 28px 88px minmax(120px, 1fr) 76px 96px;
+    gap: 5px;
+    font-size: 12px;
+  }
+
+  .germanyExpenseComment em {
+    font-size: 10px;
+  }
+}

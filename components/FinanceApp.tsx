@@ -1597,10 +1597,10 @@ export default function FinanceApp({ userId }: { userId: string }) {
 
           <nav className="mainTabs headerTabs">
             <button type="button" className={`mainTab ${mainTab === "diary" ? "active" : ""}`} onClick={() => setMainTab("diary")}>
-              Дневник
+              Казахстан
             </button>
             <button type="button" className={`mainTab ${mainTab === "relocation" ? "active" : ""}`} onClick={() => setMainTab("relocation")}>
-              Переезд / мультивалюта
+              Германия
             </button>
           </nav>
 
@@ -1633,7 +1633,7 @@ export default function FinanceApp({ userId }: { userId: string }) {
           <section className="panel diaryPanel">
             <div className="panel-head">
               <div>
-                <h2>Дневник операций</h2>
+                <h2>Казахстан · дневник</h2>
                 <span className="hint">{doneCount} факт · {pendingCount} план</span>
               </div>
               <div className="panel-tools diaryPanelTools">

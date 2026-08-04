@@ -709,29 +709,90 @@ export default function MigrationPlanner({
     });
   }, [plan, getDiaryBalanceBeforeMonth, getDiaryMonthPlan]);
 
-  const matrixPageCount = Math.max(1, Math.ceil(data.length / matrixPageSize));
+  const incomeCategoryNames = useMemo(() => {
+    const names = incomeCategories.map((category) => category.name.trim()).filter(Boolean);
+    return [...new Set(names.length ? names : ["Доходы"] )];
+  }, [incomeCategories]);
+
+  const expenseCategoryNames = useMemo(() => {
+    const names = expenseCategories.map((category) => category.name.trim()).filter(Boolean);
+    return [...new Set(names.length ? names : ["Расходы"] )];
+  }, [expenseCategories]);
+
+  const germanyData = useMemo(() => {
+    let cumulativeKzt = getDiaryBalanceBeforeMonth(plan.startMonth) + Number(plan.startBalanceEur || 0) * Number(plan.eurKzt || 1);
+    const partTimeNetLocal = calcGermanNet(Number(plan.grossPartTime || 0), plan).net;
+    const mainNetLocal = calcGermanNet(Number(plan.grossMain || 0), plan).net;
+
+    return data.map((month) => {
+      const germanyIncomeBy = Object.fromEntries(incomeCategoryNames.map((name) => [name, 0])) as Record<string, number>;
+      const germanyExpenseBy = Object.fromEntries(expenseCategoryNames.map((name) => [name, 0])) as Record<string, number>;
+
+      plan.rows.forEach((row) => {
+        if (!rowApplies(row, month.month, plan.startMonth)) return;
+        const amountKzt = toKzt(
+          effectiveRowAmount(row, partTimeNetLocal, mainNetLocal),
+          effectiveRowCurrency(row),
+          Number(plan.eurKzt || 1)
+        );
+        const target = row.kind === "income" ? germanyIncomeBy : germanyExpenseBy;
+        const names = row.kind === "income" ? incomeCategoryNames : expenseCategoryNames;
+        const fallback = names.includes("Другое") ? "Другое" : names[0];
+        const group = names.includes(row.group) ? row.group : fallback;
+        target[group] = Number(target[group] || 0) + amountKzt;
+      });
+
+      plan.germanyExpenses.forEach((row) => {
+        if (!germanyExpenseApplies(row, month.month, plan.startMonth)) return;
+        const amountKzt = toKzt(Number(row.amount || 0), row.currency, Number(plan.eurKzt || 1));
+        const fallback = expenseCategoryNames.includes("Другое") ? "Другое" : expenseCategoryNames[0];
+        const group = expenseCategoryNames.includes(row.group) ? row.group : fallback;
+        germanyExpenseBy[group] = Number(germanyExpenseBy[group] || 0) + amountKzt;
+      });
+
+      const incomeKzt = Object.values(germanyIncomeBy).reduce((sum, value) => sum + Number(value || 0), 0);
+      const germanyExpenseKzt = Object.values(germanyExpenseBy).reduce((sum, value) => sum + Number(value || 0), 0);
+      const kzExpenseKzt = Number(month.byCountry.KZ.expenseKzt || 0);
+      const expenseKzt = germanyExpenseKzt + kzExpenseKzt;
+      const netKzt = incomeKzt - expenseKzt;
+      cumulativeKzt += netKzt;
+
+      return {
+        ...month,
+        incomeKzt,
+        expenseKzt,
+        netKzt,
+        cumulativeKzt,
+        germanyIncomeBy,
+        germanyExpenseBy,
+        kzExpenseKzt
+      };
+    });
+  }, [data, plan, incomeCategoryNames, expenseCategoryNames, getDiaryBalanceBeforeMonth]);
+
+  const matrixPageCount = Math.max(1, Math.ceil(germanyData.length / matrixPageSize));
   const safeMatrixPage = Math.min(matrixPage, matrixPageCount - 1);
   const visibleData = useMemo(
-    () => data.slice(safeMatrixPage * matrixPageSize, safeMatrixPage * matrixPageSize + matrixPageSize),
-    [data, safeMatrixPage, matrixPageSize]
+    () => germanyData.slice(safeMatrixPage * matrixPageSize, safeMatrixPage * matrixPageSize + matrixPageSize),
+    [germanyData, safeMatrixPage, matrixPageSize]
   );
 
   const summary = useMemo(() => {
-    const min = Math.min(...data.map((m) => m.cumulativeKzt), 0);
-    const firstNegative = data.find((m) => m.cumulativeKzt < 0)?.month || "";
-    const totalIncome = data.reduce((s, m) => s + m.incomeKzt, 0);
-    const totalExpense = data.reduce((s, m) => s + m.expenseKzt, 0);
-    const last = data.at(-1);
-    const safeIndex = data.findIndex((m) => m.cumulativeKzt < 0);
+    const min = Math.min(...germanyData.map((m) => m.cumulativeKzt), 0);
+    const firstNegative = germanyData.find((m) => m.cumulativeKzt < 0)?.month || "";
+    const totalIncome = germanyData.reduce((s, m) => s + m.incomeKzt, 0);
+    const totalExpense = germanyData.reduce((s, m) => s + m.expenseKzt, 0);
+    const last = germanyData.at(-1);
+    const safeIndex = germanyData.findIndex((m) => m.cumulativeKzt < 0);
     return {
       min,
       firstNegative,
       totalIncome,
       totalExpense,
       endKzt: last?.cumulativeKzt || 0,
-      safeMonths: safeIndex === -1 ? data.length : safeIndex
+      safeMonths: safeIndex === -1 ? germanyData.length : safeIndex
     };
-  }, [data]);
+  }, [germanyData]);
 
   const partTimeNet = calcGermanNet(Number(plan.grossPartTime || 0), plan);
   const mainNet = calcGermanNet(Number(plan.grossMain || 0), plan);
@@ -1078,7 +1139,7 @@ export default function MigrationPlanner({
             <div className="panel-head forecastPanelHead">
               <div>
                 <h2>Календарный прогноз</h2>
-                <span className="hint">только Германия и общий итог · показано {visibleData.length} мес.</span>
+                <span className="hint">статьи общие с Казахстаном · Казахстан показан одной строкой расходов · {visibleData.length} мес.</span>
               </div>
               <div className="matrixCurrencyTools">
                 <span>1 € = {compact(plan.eurKzt)} ₸</span>
@@ -1107,10 +1168,26 @@ export default function MigrationPlanner({
                   </tr>
                 </thead>
                 <tbody>
-                  <tr className="strong cumulativeRow"><th className="rowhead">Накопительно</th>{visibleData.map((m) => <td className={m.cumulativeKzt < 0 ? "neg" : ""} key={`bal-${m.month}`}>{matrixValue(m.cumulativeKzt)}</td>)}</tr>
                   <tr className="strong netRow"><th className="rowhead">Остаток месяца</th>{visibleData.map((m) => <td className={m.netKzt < 0 ? "neg" : ""} key={`net-${m.month}`}>{matrixValue(m.netKzt)}</td>)}</tr>
+                  <tr className="strong cumulativeRow"><th className="rowhead">Накопительно</th>{visibleData.map((m) => <td className={m.cumulativeKzt < 0 ? "neg" : ""} key={`bal-${m.month}`}>{matrixValue(m.cumulativeKzt)}</td>)}</tr>
                   <tr className="section incomeSection"><th className="rowhead">Доходы</th>{visibleData.map((m) => <td key={`inc-${m.month}`}>{matrixValue(m.incomeKzt)}</td>)}</tr>
+                  {incomeCategoryNames.map((name) => (
+                    <tr className="incomeRow" key={`de-inc-${name}`}>
+                      <th className="rowhead light">{name}</th>
+                      {visibleData.map((m) => <td key={`de-inc-${name}-${m.month}`}>{matrixValue(m.germanyIncomeBy[name] || 0)}</td>)}
+                    </tr>
+                  ))}
                   <tr className="section expenseSection"><th className="rowhead">Расходы</th>{visibleData.map((m) => <td key={`exp-${m.month}`}>{matrixValue(m.expenseKzt)}</td>)}</tr>
+                  {expenseCategoryNames.map((name) => (
+                    <tr className="expenseRow" key={`de-exp-${name}`}>
+                      <th className="rowhead light">{name}</th>
+                      {visibleData.map((m) => <td key={`de-exp-${name}-${m.month}`}>{matrixValue(m.germanyExpenseBy[name] || 0)}</td>)}
+                    </tr>
+                  ))}
+                  <tr className="expenseRow kzExpenseSummaryRow">
+                    <th className="rowhead light">Казахстан · расходы</th>
+                    {visibleData.map((m) => <td key={`kz-exp-${m.month}`}>{matrixValue(m.kzExpenseKzt)}</td>)}
+                  </tr>
                 </tbody>
               </table>
             </div>

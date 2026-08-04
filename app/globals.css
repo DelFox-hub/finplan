@@ -3810,3 +3810,12 @@ select {
     gap: 4px;
   }
 }
+
+
+.kzExpenseSummaryRow th,
+.kzExpenseSummaryRow td {
+  background: #fff1ef !important;
+  color: #c23f2b !important;
+  font-weight: 800;
+  border-top: 2px solid #f3c7c0;
+}

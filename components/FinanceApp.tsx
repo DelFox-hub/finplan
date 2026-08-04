@@ -412,6 +412,7 @@ export default function FinanceApp({ userId }: { userId: string }) {
   const pendingSettingsRef = useRef<Settings | null>(null);
   const pendingPaymentPatchesRef = useRef<Record<string, Partial<RecurringPayment>>>({});
   const pendingIncomePatchesRef = useRef<Record<string, Partial<RecurringIncome>>>({});
+  const pendingOperationPatchesRef = useRef<Record<string, Partial<Operation>>>({});
   const [settingsTableFilters, setSettingsTableFilters] = useState<Record<SettingsTableKey, Record<string, string>>>({
     payments: { active: "all", title: "", category: "", amount: "", due_day: "", from: "", to: "" },
     credits: { active: "all", title: "", category: "", amount: "", due_day: "", total_months: "", paid_months: "", from: "" },
@@ -427,7 +428,6 @@ export default function FinanceApp({ userId }: { userId: string }) {
     incomeCategories: { key: "sort_order", direction: "asc" }
   });
   const [opModalOpen, setOpModalOpen] = useState(false);
-  const [editingOperationId, setEditingOperationId] = useState<string | null>(null);
   const [opForm, setOpForm] = useState({
     op_date: `${currentMonth()}-01`,
     kind: "expense" as Kind,
@@ -820,6 +820,7 @@ export default function FinanceApp({ userId }: { userId: string }) {
     pendingSettingsRef.current = null;
     pendingPaymentPatchesRef.current = {};
     pendingIncomePatchesRef.current = {};
+    pendingOperationPatchesRef.current = {};
   }
 
   async function flushPendingDatabaseSaves() {
@@ -855,6 +856,12 @@ export default function FinanceApp({ userId }: { userId: string }) {
       tasks.push(previous.catch(() => undefined).then(() => supabase.from("recurring_incomes").update(patch).eq("user_id", userId).eq("id", id)));
     });
     pendingIncomePatchesRef.current = {};
+
+    Object.entries(pendingOperationPatchesRef.current).forEach(([id, patch]) => {
+      const previous = saveChainsRef.current[`operation:${id}`] || Promise.resolve();
+      tasks.push(previous.catch(() => undefined).then(() => supabase.from("operations").update(patch).eq("user_id", userId).eq("id", id)));
+    });
+    pendingOperationPatchesRef.current = {};
 
     const remainingChains = Object.values(saveChainsRef.current);
     tasks.push(...remainingChains.map((chain) => chain.catch(() => undefined)));
@@ -1033,7 +1040,6 @@ export default function FinanceApp({ userId }: { userId: string }) {
   }
 
   function openNewOperation() {
-    setEditingOperationId(null);
     setOpForm({
       op_date: `${viewMonth}-01`,
       kind: "expense",
@@ -1044,17 +1050,6 @@ export default function FinanceApp({ userId }: { userId: string }) {
     setOpModalOpen(true);
   }
 
-  function openEditOperation(op: Operation) {
-    setEditingOperationId(op.id);
-    setOpForm({
-      op_date: op.op_date,
-      kind: op.kind,
-      category_id: op.category_id || "",
-      title: op.title || "",
-      amount: String(op.amount || "")
-    });
-    setOpModalOpen(true);
-  }
 
   async function saveOperation(e: React.FormEvent) {
     e.preventDefault();
@@ -1065,7 +1060,6 @@ export default function FinanceApp({ userId }: { userId: string }) {
       return;
     }
 
-    const editingOperation = editingOperationId ? operations.find((item) => item.id === editingOperationId) : null;
     const row = {
       user_id: userId,
       op_date: opForm.op_date || `${viewMonth}-01`,
@@ -1073,33 +1067,46 @@ export default function FinanceApp({ userId }: { userId: string }) {
       category_id: opForm.category_id || null,
       title: opForm.title.trim() || "Операция",
       amount,
-      completed: editingOperation?.completed ?? false,
-      sort_order: editingOperation?.sort_order ?? nextSortOrder(monthOps(String(opForm.op_date || `${viewMonth}-01`).slice(0, 7)))
+      completed: false,
+      sort_order: nextSortOrder(monthOps(String(opForm.op_date || `${viewMonth}-01`).slice(0, 7)))
     };
 
-    if (editingOperationId) {
-      const { data, error } = await supabase.from("operations").update(row).eq("user_id", userId).eq("id", editingOperationId).select("*").single();
-      if (error) {
-        flash(error.message);
-        return;
-      }
-      setOperations((prev) => prev.map((x) => (x.id === editingOperationId ? { ...data, amount: Number(data.amount || 0) } : x)));
-    } else {
-      const { data, error } = await supabase.from("operations").insert(row).select("*").single();
-      if (error) {
-        flash(error.message);
-        return;
-      }
-      setOperations((prev) => [...prev, { ...data, amount: Number(data.amount || 0) }]);
+    const { data, error } = await supabase.from("operations").insert(row).select("*").single();
+    if (error) {
+      flash(error.message);
+      return;
     }
-
+    setOperations((prev) => [...prev, { ...data, amount: Number(data.amount || 0) }]);
     setOpModalOpen(false);
-    setEditingOperationId(null);
     setViewMonth(String(row.op_date).slice(0, 7));
+  }
+
+  function updateOperationInline(id: string, patch: Partial<Operation>) {
+    const current = operations.find((operation) => operation.id === id);
+    if (!current) return;
+
+    const normalized: Partial<Operation> = { ...patch };
+    if (patch.amount !== undefined) normalized.amount = Math.max(Number(patch.amount || 0), 0);
+    if (patch.title !== undefined) normalized.title = patch.title;
+    if (patch.op_date !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(patch.op_date)) return;
+
+    setOperations((previous) => previous.map((operation) => operation.id === id ? { ...operation, ...normalized } : operation));
+    pendingOperationPatchesRef.current[id] = { ...pendingOperationPatchesRef.current[id], ...normalized };
+
+    queueDatabaseSave(`operation:${id}`, async () => {
+      const merged = pendingOperationPatchesRef.current[id];
+      if (!merged || !Object.keys(merged).length) return null;
+      delete pendingOperationPatchesRef.current[id];
+      const { error } = await supabase.from("operations").update(merged).eq("user_id", userId).eq("id", id);
+      if (error) pendingOperationPatchesRef.current[id] = { ...merged, ...pendingOperationPatchesRef.current[id] };
+      return error;
+    });
   }
 
   async function deleteOperation(op: Operation) {
     if (!confirm("Удалить операцию?")) return;
+    await cancelQueuedSave(`operation:${op.id}`);
+    delete pendingOperationPatchesRef.current[op.id];
     const { error } = await supabase.from("operations").delete().eq("user_id", userId).eq("id", op.id);
     if (error) {
       flash(error.message);
@@ -2052,9 +2059,10 @@ export default function FinanceApp({ userId }: { userId: string }) {
 
                   const op = row.op;
                   const real = !("virtual" in op);
-                  const cat = op.kind === "income" ? categoryName(incomeCategories, op.category_id, "Доход") : categoryName(expenseCategories, op.category_id, "Другое");
+                  const virtualPayment = "virtual" in op ? op.payment : null;
+                  const categories = op.kind === "income" ? incomeCategories : expenseCategories;
                   return (
-                    <div className={`oprow ${op.kind} ${op.completed ? "done" : "pending"} ${"virtual" in op ? "virtual" : ""}`} key={`${op.id}-${idx}`}>
+                    <div className={`oprow editableOperationRow ${op.kind} ${op.completed ? "done" : "pending"} ${"virtual" in op ? "virtual" : ""}`} key={`${op.id}-${idx}`}>
                       <label className="checkcell">
                         <input
                           type="checkbox"
@@ -2066,25 +2074,88 @@ export default function FinanceApp({ userId }: { userId: string }) {
                         />
                         <span />
                       </label>
-                      <div className="cell dateCell">{op.op_date.slice(8, 10)}.{op.op_date.slice(5, 7)}</div>
-                      <div><span className={`tag ${op.kind}`}>{op.kind === "income" ? "Доход" : "Расход"}</span></div>
-                      <div className="cell categoryCell">{cat}</div>
-                      <div className="cell commentCell">
-                        <span>{op.title}</span>
+
+                      {real ? (
+                        <input
+                          type="date"
+                          className="operationInlineControl operationDateInput"
+                          value={op.op_date}
+                          aria-label="Дата операции"
+                          onChange={(event) => updateOperationInline(op.id, { op_date: event.target.value })}
+                        />
+                      ) : (
+                        <input
+                          type="date"
+                          className="operationInlineControl operationDateInput"
+                          value={op.op_date}
+                          aria-label="Дата регулярного платежа"
+                          onChange={(event) => updatePayment(virtualPayment!.id, { due_day: Number(event.target.value.slice(8, 10) || 1) })}
+                        />
+                      )}
+
+                      {real ? (
+                        <select
+                          className="operationInlineControl operationKindControl"
+                          value={op.kind}
+                          aria-label="Тип операции"
+                          onChange={(event) => {
+                            const kind = event.target.value as Kind;
+                            const firstCategory = kind === "income" ? incomeCategories[0]?.id || null : expenseCategories[0]?.id || null;
+                            updateOperationInline(op.id, { kind, category_id: firstCategory });
+                          }}
+                        >
+                          <option value="expense">Расход</option>
+                          <option value="income">Доход</option>
+                        </select>
+                      ) : (
+                        <span className="tag expense operationFixedType">Расход</span>
+                      )}
+
+                      <select
+                        className="operationInlineControl operationCategoryControl"
+                        value={op.category_id || ""}
+                        aria-label="Статья операции"
+                        onChange={(event) => real
+                          ? updateOperationInline(op.id, { category_id: event.target.value || null })
+                          : updatePayment(virtualPayment!.id, { category_id: event.target.value || null })}
+                      >
+                        {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+                      </select>
+
+                      <div className="operationCommentEditor">
+                        <input
+                          className="operationInlineControl"
+                          value={op.title}
+                          aria-label="Комментарий операции"
+                          onChange={(event) => real
+                            ? updateOperationInline(op.id, { title: event.target.value })
+                            : updatePayment(virtualPayment!.id, { title: event.target.value })}
+                        />
                         <b className={`statusBadge ${op.completed ? "fact" : "plan"}`}>{op.completed ? "факт" : "план"}</b>
-                        <em>{op.source_recurring_payment_id ? "рег. платёж" : op.source_recurring_income_id ? "рег. доход" : "ручн."}</em>
+                        <em>{real ? "ручн." : "рег. платёж"}</em>
                       </div>
-                      <div className={`amount ${op.kind}`}>{op.kind === "income" ? "+" : "−"}{fmt(op.amount)}</div>
+
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        className={`operationInlineControl operationAmountInput ${op.kind}`}
+                        value={op.amount}
+                        aria-label="Сумма операции"
+                        onChange={(event) => real
+                          ? updateOperationInline(op.id, { amount: Math.max(Number(event.target.value || 0), 0) })
+                          : updatePayment(virtualPayment!.id, { amount: Math.max(Number(event.target.value || 0), 0) })}
+                      />
+
                       <div className="rowactions">
                         {real ? (
                           <>
-                            <button className="movebtn" onClick={() => moveOperation(op as Operation, -1)}>↑</button>
-                            <button className="movebtn" onClick={() => moveOperation(op as Operation, 1)}>↓</button>
-                            <button className="edit" onClick={() => openEditOperation(op as Operation)}>✎</button>
-                            <button className="delete" onClick={() => deleteOperation(op as Operation)}>×</button>
+                            <button className="movebtn" type="button" onClick={() => moveOperation(op as Operation, -1)}>↑</button>
+                            <button className="movebtn" type="button" onClick={() => moveOperation(op as Operation, 1)}>↓</button>
+                            <button className="delete" type="button" onClick={() => deleteOperation(op as Operation)}>×</button>
                           </>
                         ) : (
-                          <span className="virtualLock">настр.</span>
+                          <span className="virtualLock">рег.</span>
                         )}
                       </div>
                     </div>
@@ -2170,7 +2241,7 @@ export default function FinanceApp({ userId }: { userId: string }) {
         <div className="modal show">
           <form className="modal-card compact" onSubmit={saveOperation}>
             <div className="modal-head">
-              <h3>{editingOperationId ? "Редактировать операцию" : "Новая операция"}</h3>
+              <h3>Новая операция</h3>
               <button type="button" onClick={() => setOpModalOpen(false)}>×</button>
             </div>
 

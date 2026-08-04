@@ -2544,7 +2544,7 @@ select {
   }
 }
 
-/* Germany main workspace: same geometry and responsive behavior as Kazakhstan. */
+/* Germany workspace structure. Geometry and typography are unified below with Kazakhstan. */
 .relocationPanel {
   padding: 0;
   border: 0;
@@ -2552,13 +2552,6 @@ select {
   background: transparent;
   box-shadow: none;
   gap: 10px;
-}
-
-.germanyDashboard {
-  display: grid;
-  grid-template-columns: minmax(720px, 50%) minmax(0, 1fr);
-  gap: 10px;
-  min-height: 680px;
 }
 
 .germanyExpensePanel,
@@ -2571,7 +2564,6 @@ select {
   align-self: stretch;
 }
 
-/* Diary panel header and controls deliberately reuse Kazakhstan dimensions. */
 .germanyExpensePanel {
   grid-template-rows: auto minmax(0, 1fr);
 }
@@ -2633,14 +2625,6 @@ select {
   grid-template-rows: 36px minmax(0, 1fr) 40px;
 }
 
-.germanyExpenseHead {
-  display: grid;
-  grid-template-columns: 32px 78px 124px minmax(180px, 1fr) 260px 120px 36px;
-  align-items: center;
-  gap: 6px;
-  padding: 0 8px;
-}
-
 .germanyExpenseBody {
   min-height: 0;
   max-height: none !important;
@@ -2649,28 +2633,6 @@ select {
 
 .kzLikeGroupWrap {
   display: contents;
-}
-
-.germanyKzRow {
-  grid-template-columns: 32px 78px 124px minmax(180px, 1fr) 260px 120px 36px;
-}
-
-.germanyInlineControl {
-  width: 100%;
-  min-width: 0;
-  height: 28px;
-  padding: 0 7px;
-  border: 1px solid #cfd9e8;
-  border-radius: 8px;
-  background: #fff;
-  color: var(--ink);
-  font: inherit;
-  font-size: 11px;
-}
-
-.germanyInlineControl:focus {
-  outline: 2px solid rgba(37, 99, 235, .18);
-  border-color: #7d9dd8;
 }
 
 .germanyCellType,
@@ -2685,26 +2647,11 @@ select {
   overflow: visible;
 }
 
-.germanyInlinePeriod {
-  display: grid;
-  grid-template-columns: 82px minmax(0, 1fr) minmax(0, 1fr);
-  gap: 5px;
-  min-width: 0;
-}
-
-.germanyInlineMoney {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 42px;
-  gap: 5px;
-  min-width: 0;
-}
-
 .germanyCurrencySelect {
   padding: 0 3px;
   text-align: center;
 }
 
-/* Forecast panel and matrix use the same geometry as Kazakhstan. */
 .germanyForecastPanel {
   grid-template-rows: 52px minmax(0, 1fr);
 }
@@ -2750,18 +2697,6 @@ select {
   }
 }
 
-@media (max-width: 1100px) {
-  .germanyDashboard {
-    grid-template-columns: 1fr;
-  }
-
-  .germanyExpensePanel,
-  .germanyForecastPanel {
-    min-height: 560px;
-    height: auto;
-  }
-}
-
 @media (max-width: 760px) {
   .germanyExpensePanel .panel-head {
     align-items: stretch;
@@ -2785,30 +2720,206 @@ select {
     width: auto;
     min-width: 170px;
   }
+}
 
+/* Unified Kazakhstan/Germany diary presentation and inline editing */
+.workspace,
+.germanyDashboard {
+  grid-template-columns: minmax(720px, 50%) minmax(0, 1fr);
+  gap: 10px;
+  min-height: 680px;
+}
+
+.workspace .panel,
+.germanyDashboard .panel {
+  font-family: "Segoe UI Variable Text", "Segoe UI", Arial, sans-serif;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.workspace .panel-head h2,
+.germanyDashboard .panel-head h2 {
+  font-size: 17px;
+  line-height: 1.15;
+}
+
+.workspace .hint,
+.germanyDashboard .hint {
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.workspace .thead,
+.germanyExpenseHead {
+  font-size: 11px;
+  line-height: 1.15;
+}
+
+.workspace .thead,
+.workspace .oprow {
+  grid-template-columns: 32px 90px 74px 110px minmax(160px, 1fr) 96px 90px;
+}
+
+.workspace .oprow,
+.germanyKzRow {
+  min-height: 38px;
+  font-size: 12px;
+  line-height: 1.15;
+}
+
+.workspace .opgroup,
+.germanyDashboard .opgroup {
+  min-height: 38px;
+  margin: 4px 7px;
+  padding: 6px 10px;
+}
+
+.workspace .groupTitle,
+.germanyDashboard .groupTitle {
+  font-size: 13px;
+  line-height: 1.15;
+}
+
+.workspace .groupMeta,
+.germanyDashboard .groupMeta {
+  font-size: 11px;
+  line-height: 1.15;
+}
+
+.operationInlineControl,
+.germanyInlineControl {
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid #cfd9e8;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.operationInlineControl:focus,
+.germanyInlineControl:focus {
+  outline: 2px solid rgba(37, 99, 235, .18);
+  border-color: #7d9dd8;
+}
+
+.editableOperationRow {
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+}
+
+.operationDateInput {
+  padding: 0 3px;
+  font-size: 10px;
+}
+
+.operationFixedType {
+  width: 100%;
+  height: 28px;
+  padding: 0 4px;
+}
+
+.operationCommentEditor {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(56px, 1fr) auto auto;
+  align-items: center;
+  gap: 3px;
+}
+
+.operationCommentEditor .statusBadge,
+.operationCommentEditor em {
+  height: 18px;
+  padding: 0 5px;
+  font-size: 8px;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.operationAmountInput {
+  text-align: right;
+  font-weight: 700;
+}
+
+.operationAmountInput.income {
+  color: var(--green);
+}
+
+.operationAmountInput.expense {
+  color: var(--red);
+}
+
+.editableOperationRow .rowactions {
+  gap: 3px;
+}
+
+.editableOperationRow .movebtn,
+.editableOperationRow .delete {
+  width: 26px;
+  height: 26px;
+}
+
+.germanyExpenseHead,
+.germanyKzRow {
+  grid-template-columns: 32px 64px 100px minmax(130px, 1fr) 205px 100px 32px;
+}
+
+.germanyInlinePeriod {
+  grid-template-columns: 62px minmax(0, 1fr) minmax(0, 1fr);
+  gap: 4px;
+}
+
+.germanyInlinePeriod .germanyInlineControl {
+  padding: 0 3px;
+  font-size: 10px;
+}
+
+.germanyInlineMoney {
+  grid-template-columns: minmax(0, 1fr) 38px;
+  gap: 4px;
+}
+
+.germanyExpenseBody,
+.workspace .tbody {
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+@media (max-width: 1100px) {
+  .workspace,
+  .germanyDashboard {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .workspace .thead,
   .germanyExpenseHead {
     display: none;
   }
 
-  .germanyKzRow {
-    grid-template-columns: 32px minmax(100px, .9fr) minmax(120px, 1fr) 32px;
+  .editableOperationRow {
+    grid-template-columns: 32px minmax(100px, .9fr) minmax(110px, 1fr) 32px;
     grid-template-areas:
-      "check type group actions"
+      "check date kind actions"
+      "check category category actions"
       "check comment comment actions"
-      "check params params actions"
       "check amount amount actions";
-    min-height: 120px;
+    min-height: 128px;
   }
 
-  .germanyKzRow > .checkcell { grid-area: check; }
-  .germanyCellType { grid-area: type; }
-  .germanyCellGroup { grid-area: group; }
-  .germanyCellComment { grid-area: comment; }
-  .germanyCellParams { grid-area: params; }
-  .germanyCellAmount { grid-area: amount; }
-  .germanyKzRow > .rowactions { grid-area: actions; }
-
-  .germanyInlinePeriod {
-    grid-template-columns: 1fr 1fr;
-  }
+  .editableOperationRow > .checkcell { grid-area: check; }
+  .editableOperationRow > .operationDateInput { grid-area: date; }
+  .editableOperationRow > .operationKindControl,
+  .editableOperationRow > .operationFixedType { grid-area: kind; }
+  .editableOperationRow > .operationCategoryControl { grid-area: category; }
+  .editableOperationRow > .operationCommentEditor { grid-area: comment; }
+  .editableOperationRow > .operationAmountInput { grid-area: amount; }
+  .editableOperationRow > .rowactions { grid-area: actions; }
 }

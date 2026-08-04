@@ -1788,6 +1788,8 @@ export default function FinanceApp({ userId }: { userId: string }) {
           <MigrationPlanner
             userId={userId}
             diaryStartMonth={calcStart}
+            expenseCategories={expenseCategories}
+            incomeCategories={incomeCategories}
             getDiaryMonthPlan={oneMonthPlan}
             getDiaryBalanceBeforeMonth={balanceBeforeMonth}
           />

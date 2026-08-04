@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import MonthPicker from "@/components/MonthPicker";
 import { createClient } from "@/lib/supabase/browser";
 
@@ -59,9 +59,16 @@ type MonthPlan = {
   scenarioByRowKzt: Record<string, number>;
 };
 
+type CategoryOption = {
+  id: string;
+  name: string;
+};
+
 type MigrationPlannerProps = {
   userId: string;
   diaryStartMonth: string;
+  expenseCategories: CategoryOption[];
+  incomeCategories: CategoryOption[];
   getDiaryMonthPlan: (month: string) => DiaryMonthPlan;
   getDiaryBalanceBeforeMonth: (month: string) => number;
 };
@@ -319,6 +326,8 @@ function normalizePlan(input: Partial<MigrationPlan> | null | undefined, diarySt
 export default function MigrationPlanner({
   userId,
   diaryStartMonth,
+  expenseCategories,
+  incomeCategories,
   getDiaryMonthPlan,
   getDiaryBalanceBeforeMonth
 }: MigrationPlannerProps) {
@@ -333,10 +342,57 @@ export default function MigrationPlanner({
   const [showSalaryCard, setShowSalaryCard] = useState(false);
   const [showScenarioParams, setShowScenarioParams] = useState(false);
   const [showScenarioSummary, setShowScenarioSummary] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "error">("saved");
+  const [matrixPage, setMatrixPage] = useState(0);
+  const [matrixPageSize, setMatrixPageSize] = useState(6);
+  const latestPlanRef = useRef(plan);
+  const dirtyRef = useRef(false);
+  const saveRequestRef = useRef(0);
+  const autoSaveTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     loadPlan();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
+
+  useEffect(() => {
+    latestPlanRef.current = plan;
+    dirtyRef.current = dirty;
+  }, [plan, dirty]);
+
+  useEffect(() => {
+    const updatePageSize = () => {
+      const width = window.innerWidth;
+      setMatrixPageSize(width < 620 ? 2 : width < 980 ? 4 : 6);
+    };
+    updatePageSize();
+    window.addEventListener("resize", updatePageSize);
+    return () => window.removeEventListener("resize", updatePageSize);
+  }, []);
+
+  useEffect(() => {
+    setMatrixPage(0);
+  }, [plan.startMonth, plan.months, matrixPageSize]);
+
+  useEffect(() => {
+    if (loading || !dirty) return;
+    if (autoSaveTimerRef.current !== null) window.clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = window.setTimeout(() => {
+      autoSaveTimerRef.current = null;
+      void savePlan(latestPlanRef.current, true);
+    }, 400);
+  }, [plan, dirty, loading]);
+
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimerRef.current !== null) window.clearTimeout(autoSaveTimerRef.current);
+      if (!dirtyRef.current) return;
+      void supabase.from("relocation_plans").upsert({
+        user_id: userId,
+        data: latestPlanRef.current,
+        updated_at: new Date().toISOString()
+      });
+    };
   }, [userId]);
 
 
@@ -349,6 +405,21 @@ export default function MigrationPlanner({
       return changed ? normalized : previous;
     });
   }, [diaryStartMonth]);
+
+  useEffect(() => {
+    if (loading) return;
+    setPlan((previous) => {
+      let changed = false;
+      const rows = previous.rows.map((row) => {
+        const allowed = groupNames(row.kind);
+        if (allowed.includes(row.group)) return row;
+        changed = true;
+        return { ...row, group: allowed[0] };
+      });
+      if (changed) setDirty(true);
+      return changed ? { ...previous, rows } : previous;
+    });
+  }, [expenseCategories, incomeCategories, loading]);
 
   async function loadPlan() {
     setLoading(true);
@@ -378,21 +449,42 @@ export default function MigrationPlanner({
     setLoading(false);
   }
 
-  async function savePlan(next = plan) {
+  async function savePlan(next = plan, silent = false) {
+    const requestId = ++saveRequestRef.current;
+    const snapshot = JSON.stringify(next);
+    setSaveStatus("saving");
+
     const { error } = await supabase.from("relocation_plans").upsert({
       user_id: userId,
       data: next,
       updated_at: new Date().toISOString()
     });
 
+    if (requestId !== saveRequestRef.current) return;
+
     if (error) {
-      setMessage(error.message);
+      setSaveStatus("error");
+      setMessage(`Не удалось сохранить: ${error.message}`);
       return;
     }
 
-    setDirty(false);
-    setMessage("План сохранён");
-    window.setTimeout(() => setMessage(""), 2500);
+    setSaveStatus("saved");
+    setMessage("");
+    if (JSON.stringify(latestPlanRef.current) === snapshot) setDirty(false);
+    if (!silent) {
+      setMessage("План сохранён");
+      window.setTimeout(() => setMessage(""), 2500);
+    }
+  }
+
+  function groupNames(kind: RowKind) {
+    const source = kind === "income" ? incomeCategories : expenseCategories;
+    const names = [...new Set(source.map((category) => category.name.trim()).filter(Boolean))];
+    return names.length ? names : [kind === "income" ? "Доход" : "Расход"];
+  }
+
+  function defaultGroup(kind: RowKind) {
+    return groupNames(kind)[0];
   }
 
   function updatePlan(patch: Partial<MigrationPlan>) {
@@ -411,6 +503,8 @@ export default function MigrationPlanner({
       rows: previous.rows.map((row) => {
         if (row.id !== id) return row;
         const next = { ...row, ...patch };
+        if (patch.kind && patch.kind !== row.kind) next.group = defaultGroup(patch.kind);
+        if (!groupNames(next.kind).includes(next.group)) next.group = defaultGroup(next.kind);
         if (patch.startMonth && next.endMonth && monthIndex(next.endMonth) < monthIndex(patch.startMonth)) next.endMonth = "";
         if (patch.endMonth && monthIndex(patch.endMonth) < monthIndex(next.startMonth || previous.startMonth)) next.endMonth = "";
         return next;
@@ -432,7 +526,7 @@ export default function MigrationPlanner({
       startMonth: plan.startMonth,
       endMonth: "",
       active: true,
-      group: kind === "income" ? "доход" : "расход"
+      group: defaultGroup(kind)
     };
 
     updatePlan({ rows: [row, ...plan.rows] });
@@ -498,6 +592,13 @@ export default function MigrationPlanner({
       };
     });
   }, [plan, getDiaryBalanceBeforeMonth, getDiaryMonthPlan]);
+
+  const matrixPageCount = Math.max(1, Math.ceil(data.length / matrixPageSize));
+  const safeMatrixPage = Math.min(matrixPage, matrixPageCount - 1);
+  const visibleData = useMemo(
+    () => data.slice(safeMatrixPage * matrixPageSize, safeMatrixPage * matrixPageSize + matrixPageSize),
+    [data, safeMatrixPage, matrixPageSize]
+  );
 
   const summary = useMemo(() => {
     const min = Math.min(...data.map((m) => m.cumulativeKzt), 0);
@@ -568,7 +669,10 @@ export default function MigrationPlanner({
           <p>Доходы, расходы, кредиты, квартира и остальные статьи Казахстана берутся напрямую из дневника. Здесь редактируются только Германия и прочие сценарные суммы.</p>
         </div>
         <div className="relocationActions">
-          <button type="button" className={`btn ${dirty ? "blue" : ""}`} onClick={() => savePlan()}>{dirty ? "Сохранить изменения" : "Сохранено"}</button>
+          <span className={`plannerSaveState ${saveStatus}`}>{saveStatus === "saving" ? "Сохраняется…" : saveStatus === "error" ? "Ошибка сохранения" : dirty ? "Изменения ожидают сохранения" : "Все изменения сохранены"}</span>
+          <button type="button" className={`btn ${dirty || saveStatus === "error" ? "blue" : ""}`} onClick={() => void savePlan()} disabled={saveStatus === "saving"}>
+            {saveStatus === "saving" ? "Сохранение…" : dirty || saveStatus === "error" ? "Сохранить сейчас" : "Сохранено"}
+          </button>
         </div>
       </div>
 
@@ -675,7 +779,7 @@ export default function MigrationPlanner({
           </div>
         )}
 
-        <div className="forecastBlock">
+        <div className="forecastBlock plannerDiarySection">
         <div className="forecastHead">
           <div>
             <h3>Помесячный сценарий</h3>
@@ -683,6 +787,11 @@ export default function MigrationPlanner({
           </div>
           <div className="matrixCurrencyTools">
             <span>1 € = {compact(plan.eurKzt)} ₸</span>
+            <div className="matrixPager" aria-label="Страницы месяцев">
+              <button type="button" onClick={() => setMatrixPage((page) => Math.max(0, page - 1))} disabled={safeMatrixPage === 0}>←</button>
+              <span>{safeMatrixPage + 1} / {matrixPageCount}</span>
+              <button type="button" onClick={() => setMatrixPage((page) => Math.min(matrixPageCount - 1, page + 1))} disabled={safeMatrixPage >= matrixPageCount - 1}>→</button>
+            </div>
             <div className="currencyToggle" role="group" aria-label="Режим таблицы">
               <button type="button" className={forecastView === "summary" ? "active" : ""} onClick={() => setForecastView("summary")}>сводно</button>
               <button type="button" className={forecastView === "detail" ? "active" : ""} onClick={() => setForecastView("detail")}>детали</button>
@@ -698,68 +807,68 @@ export default function MigrationPlanner({
             <thead>
               <tr>
                 <th className="stickyCol">Показатель</th>
-                {data.map((month) => <th key={month.month}>{monthLabel(month.month)}</th>)}
+                {visibleData.map((month) => <th key={month.month}>{monthLabel(month.month)}</th>)}
               </tr>
             </thead>
             <tbody>
-              <tr className="strong totalIncomeRow"><th className="stickyCol">Доходы всего</th>{data.map((month) => <td key={`i-${month.month}`}>{matrixValue(month.incomeKzt)}</td>)}</tr>
-              <tr className="strong totalExpenseRow"><th className="stickyCol">Расходы всего</th>{data.map((month) => <td key={`e-${month.month}`}>{matrixValue(month.expenseKzt)}</td>)}</tr>
-              <tr className="strong netRow"><th className="stickyCol">Остаток месяца</th>{data.map((month) => <td className={month.netKzt < 0 ? "badCell" : ""} key={`n-${month.month}`}>{matrixValue(month.netKzt)}</td>)}</tr>
-              <tr className="strong cumulativeRow"><th className="stickyCol">Накопительно</th>{data.map((month) => <td className={month.cumulativeKzt < 0 ? "badCell" : ""} key={`c-${month.month}`}>{matrixValue(month.cumulativeKzt)}</td>)}</tr>
+              <tr className="strong totalIncomeRow"><th className="stickyCol">Доходы всего</th>{visibleData.map((month) => <td key={`i-${month.month}`}>{matrixValue(month.incomeKzt)}</td>)}</tr>
+              <tr className="strong totalExpenseRow"><th className="stickyCol">Расходы всего</th>{visibleData.map((month) => <td key={`e-${month.month}`}>{matrixValue(month.expenseKzt)}</td>)}</tr>
+              <tr className="strong netRow"><th className="stickyCol">Остаток месяца</th>{visibleData.map((month) => <td className={month.netKzt < 0 ? "badCell" : ""} key={`n-${month.month}`}>{matrixValue(month.netKzt)}</td>)}</tr>
+              <tr className="strong cumulativeRow"><th className="stickyCol">Накопительно</th>{visibleData.map((month) => <td className={month.cumulativeKzt < 0 ? "badCell" : ""} key={`c-${month.month}`}>{matrixValue(month.cumulativeKzt)}</td>)}</tr>
 
               {forecastView === "summary" ? (
                 <>
-                  <tr className="countryNetRow kzNet"><th className="stickyCol">Казахстан · итог</th>{data.map((month) => <td key={`kz-net-${month.month}`}>{matrixValue(month.byCountry.KZ.incomeKzt - month.byCountry.KZ.expenseKzt)}</td>)}</tr>
-                  <tr className="countryNetRow deNet"><th className="stickyCol">Германия · итог</th>{data.map((month) => <td key={`de-net-${month.month}`}>{matrixValue(month.byCountry.DE.incomeKzt - month.byCountry.DE.expenseKzt)}</td>)}</tr>
-                  <tr className="countryNetRow otherNet"><th className="stickyCol">Другое · итог</th>{data.map((month) => <td key={`other-net-${month.month}`}>{matrixValue(month.byCountry.OTHER.incomeKzt - month.byCountry.OTHER.expenseKzt)}</td>)}</tr>
+                  <tr className="countryNetRow kzNet"><th className="stickyCol">Казахстан · итог</th>{visibleData.map((month) => <td key={`kz-net-${month.month}`}>{matrixValue(month.byCountry.KZ.incomeKzt - month.byCountry.KZ.expenseKzt)}</td>)}</tr>
+                  <tr className="countryNetRow deNet"><th className="stickyCol">Германия · итог</th>{visibleData.map((month) => <td key={`de-net-${month.month}`}>{matrixValue(month.byCountry.DE.incomeKzt - month.byCountry.DE.expenseKzt)}</td>)}</tr>
+                  <tr className="countryNetRow otherNet"><th className="stickyCol">Другое · итог</th>{visibleData.map((month) => <td key={`other-net-${month.month}`}>{matrixValue(month.byCountry.OTHER.incomeKzt - month.byCountry.OTHER.expenseKzt)}</td>)}</tr>
                 </>
               ) : (
                 <>
-                  <tr className="countrySection synced"><th className="stickyCol">Казахстан · дневник</th>{data.map((month) => <td key={`kz-title-${month.month}`}></td>)}</tr>
-                  <tr className="section incomeSection"><th className="stickyCol">Доходы</th>{data.map((month) => <td key={`kzi-${month.month}`}>{matrixValue(month.byCountry.KZ.incomeKzt)}</td>)}</tr>
+                  <tr className="countrySection synced"><th className="stickyCol">Казахстан · дневник</th>{visibleData.map((month) => <td key={`kz-title-${month.month}`}></td>)}</tr>
+                  <tr className="section incomeSection"><th className="stickyCol">Доходы</th>{visibleData.map((month) => <td key={`kzi-${month.month}`}>{matrixValue(month.byCountry.KZ.incomeKzt)}</td>)}</tr>
                   {kzIncomeNames.map((name) => (
                     <tr className="detailRow" key={`kzi-name-${name}`}>
                       <th className="stickyCol">{name}</th>
-                      {data.map((month) => <td key={`kzi-${name}-${month.month}`}>{matrixValue(month.kzIncomeBy[name] || 0)}</td>)}
+                      {visibleData.map((month) => <td key={`kzi-${name}-${month.month}`}>{matrixValue(month.kzIncomeBy[name] || 0)}</td>)}
                     </tr>
                   ))}
-                  <tr className="section expenseSection"><th className="stickyCol">Расходы</th>{data.map((month) => <td key={`kze-${month.month}`}>{matrixValue(month.byCountry.KZ.expenseKzt)}</td>)}</tr>
+                  <tr className="section expenseSection"><th className="stickyCol">Расходы</th>{visibleData.map((month) => <td key={`kze-${month.month}`}>{matrixValue(month.byCountry.KZ.expenseKzt)}</td>)}</tr>
                   {kzExpenseNames.map((name) => (
                     <tr className="detailRow" key={`kze-name-${name}`}>
                       <th className="stickyCol">{name}</th>
-                      {data.map((month) => <td key={`kze-${name}-${month.month}`}>{matrixValue(month.kzExpenseBy[name] || 0)}</td>)}
+                      {visibleData.map((month) => <td key={`kze-${name}-${month.month}`}>{matrixValue(month.kzExpenseBy[name] || 0)}</td>)}
                     </tr>
                   ))}
 
-                  <tr className="countrySection"><th className="stickyCol">Германия</th>{data.map((month) => <td key={`de-title-${month.month}`}></td>)}</tr>
-                  <tr className="section incomeSection"><th className="stickyCol">Доходы</th>{data.map((month) => <td key={`dei-${month.month}`}>{matrixValue(month.byCountry.DE.incomeKzt)}</td>)}</tr>
+                  <tr className="countrySection"><th className="stickyCol">Германия</th>{visibleData.map((month) => <td key={`de-title-${month.month}`}></td>)}</tr>
+                  <tr className="section incomeSection"><th className="stickyCol">Доходы</th>{visibleData.map((month) => <td key={`dei-${month.month}`}>{matrixValue(month.byCountry.DE.incomeKzt)}</td>)}</tr>
                   {scenarioRowsByCountry("DE", "income").map((row) => (
                     <tr className="detailRow" key={`de-income-${row.id}`}>
                       <th className="stickyCol">{row.title}</th>
-                      {data.map((month) => <td key={`de-income-${row.id}-${month.month}`}>{matrixValue(month.scenarioByRowKzt[row.id] || 0)}</td>)}
+                      {visibleData.map((month) => <td key={`de-income-${row.id}-${month.month}`}>{matrixValue(month.scenarioByRowKzt[row.id] || 0)}</td>)}
                     </tr>
                   ))}
-                  <tr className="section expenseSection"><th className="stickyCol">Расходы</th>{data.map((month) => <td key={`dee-${month.month}`}>{matrixValue(month.byCountry.DE.expenseKzt)}</td>)}</tr>
+                  <tr className="section expenseSection"><th className="stickyCol">Расходы</th>{visibleData.map((month) => <td key={`dee-${month.month}`}>{matrixValue(month.byCountry.DE.expenseKzt)}</td>)}</tr>
                   {scenarioRowsByCountry("DE", "expense").map((row) => (
                     <tr className="detailRow" key={`de-expense-${row.id}`}>
                       <th className="stickyCol">{row.title}</th>
-                      {data.map((month) => <td key={`de-expense-${row.id}-${month.month}`}>{matrixValue(month.scenarioByRowKzt[row.id] || 0)}</td>)}
+                      {visibleData.map((month) => <td key={`de-expense-${row.id}-${month.month}`}>{matrixValue(month.scenarioByRowKzt[row.id] || 0)}</td>)}
                     </tr>
                   ))}
 
-                  <tr className="countrySection"><th className="stickyCol">Другое</th>{data.map((month) => <td key={`other-title-${month.month}`}></td>)}</tr>
-                  <tr className="section incomeSection"><th className="stickyCol">Доходы</th>{data.map((month) => <td key={`oi-${month.month}`}>{matrixValue(month.byCountry.OTHER.incomeKzt)}</td>)}</tr>
+                  <tr className="countrySection"><th className="stickyCol">Другое</th>{visibleData.map((month) => <td key={`other-title-${month.month}`}></td>)}</tr>
+                  <tr className="section incomeSection"><th className="stickyCol">Доходы</th>{visibleData.map((month) => <td key={`oi-${month.month}`}>{matrixValue(month.byCountry.OTHER.incomeKzt)}</td>)}</tr>
                   {scenarioRowsByCountry("OTHER", "income").map((row) => (
                     <tr className="detailRow" key={`other-income-${row.id}`}>
                       <th className="stickyCol">{row.title}</th>
-                      {data.map((month) => <td key={`other-income-${row.id}-${month.month}`}>{matrixValue(month.scenarioByRowKzt[row.id] || 0)}</td>)}
+                      {visibleData.map((month) => <td key={`other-income-${row.id}-${month.month}`}>{matrixValue(month.scenarioByRowKzt[row.id] || 0)}</td>)}
                     </tr>
                   ))}
-                  <tr className="section expenseSection"><th className="stickyCol">Расходы</th>{data.map((month) => <td key={`oe-${month.month}`}>{matrixValue(month.byCountry.OTHER.expenseKzt)}</td>)}</tr>
+                  <tr className="section expenseSection"><th className="stickyCol">Расходы</th>{visibleData.map((month) => <td key={`oe-${month.month}`}>{matrixValue(month.byCountry.OTHER.expenseKzt)}</td>)}</tr>
                   {scenarioRowsByCountry("OTHER", "expense").map((row) => (
                     <tr className="detailRow" key={`other-expense-${row.id}`}>
                       <th className="stickyCol">{row.title}</th>
-                      {data.map((month) => <td key={`other-expense-${row.id}-${month.month}`}>{matrixValue(month.scenarioByRowKzt[row.id] || 0)}</td>)}
+                      {visibleData.map((month) => <td key={`other-expense-${row.id}-${month.month}`}>{matrixValue(month.scenarioByRowKzt[row.id] || 0)}</td>)}
                     </tr>
                   ))}
                 </>
@@ -769,11 +878,11 @@ export default function MigrationPlanner({
         </div>
         </div>
 
-        <div className="plannerSources">
+        <div className="plannerSources plannerDiarySection">
           <div className="sourcesHead">
             <div>
               <h3>Германия и прочие сценарные статьи</h3>
-              <p>Здесь редактируются только пользовательские строки сценария. Казахстан заполняется из дневника автоматически.</p>
+              <p>Группа выбирается из статей в настройках. Строки сохраняются автоматически.</p>
             </div>
             <div>
               <button type="button" className="btn blue" onClick={() => addRow("income")}>+ доход</button>
@@ -787,93 +896,105 @@ export default function MigrationPlanner({
             <span>Расходных: <b>{scenarioMeta.expenseCount}</b></span>
           </div>
 
-          <div className="sourceTableWrap wideTableWrap">
-            <table className="sourceTable">
-              <thead>
-                <tr>
-                  <th>on</th>
-                  <th>Тип</th>
-                  <th>Название</th>
-                  <th>Страна</th>
-                  <th>Сумма</th>
-                  <th>Расчёт</th>
-                  <th>Частота</th>
-                  <th>Период</th>
-                  <th>Группа</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {plan.rows.map((row) => (
-                  <tr key={row.id} className={row.kind}>
-                    <td><input type="checkbox" checked={row.active} onChange={(e) => updateRow(row.id, { active: e.target.checked })} /></td>
-                    <td>
-                      <select value={row.kind} onChange={(e) => updateRow(row.id, { kind: e.target.value as RowKind })}>
-                        <option value="income">доход</option>
-                        <option value="expense">расход</option>
-                      </select>
-                    </td>
-                    <td><input className="titleInput" value={row.title} onChange={(e) => updateRow(row.id, { title: e.target.value })} /></td>
-                    <td>
-                      <select value={row.country} onChange={(e) => updateRow(row.id, { country: e.target.value as Country })}>
-                        {Object.entries(countries).map(([key, value]) => <option key={key} value={key}>{value}</option>)}
-                      </select>
-                    </td>
-                    <td>
-                      <div className="amountEditor">
-                        <input
-                          type="number"
-                          value={row.autoSource ? Math.round(effectiveRowAmount(row, partTimeNet.net, mainNet.net)) : row.amount}
-                          disabled={!!row.autoSource}
-                          onChange={(e) => updateRow(row.id, { amount: Number(e.target.value || 0) })}
-                        />
-                        <select
-                          value={effectiveRowCurrency(row)}
-                          disabled={!!row.autoSource}
-                          onChange={(e) => updateRow(row.id, { currency: e.target.value as Currency })}
-                        >
-                          <option value="KZT">₸</option>
-                          <option value="EUR">€</option>
-                        </select>
-                      </div>
-                    </td>
-                    <td>
+          <div className="scenarioList">
+            {plan.rows.map((row) => (
+              <div key={row.id} className={`scenarioItem ${row.kind} ${row.active ? "" : "inactive"}`}>
+                <div className="scenarioItemMain">
+                  <label className="scenarioActive" title="Активность строки">
+                    <input type="checkbox" checked={row.active} onChange={(e) => updateRow(row.id, { active: e.target.checked })} />
+                    <span>on</span>
+                  </label>
+
+                  <label>
+                    <span>Тип</span>
+                    <select value={row.kind} onChange={(e) => updateRow(row.id, { kind: e.target.value as RowKind })}>
+                      <option value="income">доход</option>
+                      <option value="expense">расход</option>
+                    </select>
+                  </label>
+
+                  <label>
+                    <span>Группа</span>
+                    <select value={row.group} onChange={(e) => updateRow(row.id, { group: e.target.value })}>
+                      {groupNames(row.kind).map((name) => <option key={name} value={name}>{name}</option>)}
+                    </select>
+                  </label>
+
+                  <label className="scenarioTitleField">
+                    <span>Название</span>
+                    <input value={row.title} onChange={(e) => updateRow(row.id, { title: e.target.value })} />
+                  </label>
+
+                  <label className="scenarioAmountField">
+                    <span>Сумма</span>
+                    <div className="amountEditor">
+                      <input
+                        type="number"
+                        value={row.autoSource ? Math.round(effectiveRowAmount(row, partTimeNet.net, mainNet.net)) : row.amount}
+                        disabled={!!row.autoSource}
+                        onChange={(e) => updateRow(row.id, { amount: Number(e.target.value || 0) })}
+                      />
                       <select
-                        value={row.autoSource || ""}
-                        onChange={(e) => {
-                          const autoSource = e.target.value as PlanRow["autoSource"];
-                          updateRow(row.id, { autoSource, ...(autoSource ? { currency: "EUR" as Currency } : {}) });
-                        }}
+                        value={effectiveRowCurrency(row)}
+                        disabled={!!row.autoSource}
+                        onChange={(e) => updateRow(row.id, { currency: e.target.value as Currency })}
                       >
-                        <option value="">ручная сумма</option>
-                        <option value="partTimeNet">нетто подработка</option>
-                        <option value="mainNet">нетто основная</option>
+                        <option value="KZT">₸</option>
+                        <option value="EUR">€</option>
                       </select>
-                    </td>
-                    <td>
-                      <select value={row.frequency} onChange={(e) => updateRow(row.id, { frequency: e.target.value as Frequency })}>
-                        <option value="monthly">ежемесячно</option>
-                        <option value="quarterly">квартал</option>
-                        <option value="yearly">год</option>
-                        <option value="once">разово</option>
-                      </select>
-                    </td>
-                    <td>
-                      <div className="periodEditor">
-                        <MonthPicker value={row.startMonth} onChange={(value) => updateRow(row.id, { startMonth: value || row.startMonth })} />
-                        <span>—</span>
-                        <MonthPicker className="periodEndPicker" value={row.endMonth} min={row.startMonth} nullable onChange={(value) => updateRow(row.id, { endMonth: value || "" })} />
-                      </div>
-                    </td>
-                    <td><input value={row.group} onChange={(e) => updateRow(row.id, { group: e.target.value })} /></td>
-                    <td className="rowTools">
-                      <button type="button" title="Дублировать" onClick={() => duplicateRow(row)}>⧉</button>
-                      <button type="button" title="Удалить" onClick={() => deleteRow(row.id)}>×</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+                  </label>
+
+                  <div className="rowTools scenarioRowTools">
+                    <button type="button" title="Дублировать" onClick={() => duplicateRow(row)}>⧉</button>
+                    <button type="button" title="Удалить" onClick={() => deleteRow(row.id)}>×</button>
+                  </div>
+                </div>
+
+                <div className="scenarioItemDetails">
+                  <label>
+                    <span>Страна</span>
+                    <select value={row.country} onChange={(e) => updateRow(row.id, { country: e.target.value as Country })}>
+                      {Object.entries(countries).map(([key, value]) => <option key={key} value={key}>{value}</option>)}
+                    </select>
+                  </label>
+
+                  <label>
+                    <span>Расчёт</span>
+                    <select
+                      value={row.autoSource || ""}
+                      onChange={(e) => {
+                        const autoSource = e.target.value as PlanRow["autoSource"];
+                        updateRow(row.id, { autoSource, ...(autoSource ? { currency: "EUR" as Currency } : {}) });
+                      }}
+                    >
+                      <option value="">ручная сумма</option>
+                      <option value="partTimeNet">нетто подработка</option>
+                      <option value="mainNet">нетто основная</option>
+                    </select>
+                  </label>
+
+                  <label>
+                    <span>Частота</span>
+                    <select value={row.frequency} onChange={(e) => updateRow(row.id, { frequency: e.target.value as Frequency })}>
+                      <option value="monthly">ежемесячно</option>
+                      <option value="quarterly">квартал</option>
+                      <option value="yearly">год</option>
+                      <option value="once">разово</option>
+                    </select>
+                  </label>
+
+                  <label className="scenarioPeriodField">
+                    <span>Период</span>
+                    <div className="periodEditor">
+                      <MonthPicker value={row.startMonth} onChange={(value) => updateRow(row.id, { startMonth: value || row.startMonth })} />
+                      <span>—</span>
+                      <MonthPicker className="periodEndPicker" value={row.endMonth} min={row.startMonth} nullable onChange={(value) => updateRow(row.id, { endMonth: value || "" })} />
+                    </div>
+                  </label>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>

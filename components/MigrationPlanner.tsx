@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { FormEvent } from "react";
 import MonthPicker from "@/components/MonthPicker";
 import { createClient } from "@/lib/supabase/browser";
 import { trackRelocationSave } from "@/lib/relocationSaveCoordinator";
@@ -33,19 +32,6 @@ type GermanyRecurringExpense = {
   active: boolean;
 };
 
-type GermanyExpenseEditorDraft = {
-  source: "regular" | "scenario";
-  id: string;
-  isNew: boolean;
-  checked: boolean;
-  group: string;
-  title: string;
-  currency: Currency;
-  amount: string;
-  frequency: Frequency;
-  startMonth: string;
-  endMonth: string;
-};
 
 type PlanRow = {
   id: string;
@@ -488,7 +474,6 @@ export default function MigrationPlanner({
   const [showScenarioParams, setShowScenarioParams] = useState(false);
   const [showScenarioSummary, setShowScenarioSummary] = useState(false);
   const [showScenarioArticles, setShowScenarioArticles] = useState(false);
-  const [germanyExpenseEditor, setGermanyExpenseEditor] = useState<GermanyExpenseEditorDraft | null>(null);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "error">("saved");
   const latestPlanRef = useRef(plan);
   const dirtyRef = useRef(false);
@@ -795,8 +780,77 @@ export default function MigrationPlanner({
 
 
 
+  function updateGermanyExpense(id: string, patch: Partial<GermanyRecurringExpense>) {
+    setDirtyPlan((previous) => ({
+      ...previous,
+      germanyExpenses: previous.germanyExpenses.map((row) => {
+        if (row.id !== id) return row;
+        const next = { ...row, ...patch };
+        if (!groupNames("expense").includes(next.group)) next.group = defaultGroup("expense");
+        if (patch.startMonth && next.endMonth && monthIndex(next.endMonth) < monthIndex(patch.startMonth)) next.endMonth = "";
+        if (patch.endMonth && monthIndex(patch.endMonth) < monthIndex(next.startMonth || previous.startMonth)) next.endMonth = "";
+        return next;
+      })
+    }));
+  }
+
+  function changeGermanyExpenseType(source: "regular" | "scenario", id: string, target: "regular" | "scenario") {
+    if (source === target) return;
+    setDirtyPlan((previous) => {
+      const remapExclusions = previous.germanyMonthExclusions.map((key) => {
+        const prefix = `${source}:${id}:`;
+        return key.startsWith(prefix) ? `${target}:${id}:${key.slice(prefix.length)}` : key;
+      });
+
+      if (source === "regular") {
+        const row = previous.germanyExpenses.find((item) => item.id === id);
+        if (!row) return previous;
+        const scenarioRow: PlanRow = {
+          id: row.id,
+          kind: "expense",
+          title: row.title,
+          country: "DE",
+          currency: row.currency,
+          amount: nonNegativeNumber(row.amount),
+          autoSource: "",
+          frequency: "once",
+          startMonth: row.startMonth || germanyViewMonth || previous.startMonth,
+          endMonth: "",
+          active: row.active,
+          group: groupNames("expense").includes(row.group) ? row.group : defaultGroup("expense"),
+          comment: ""
+        };
+        return {
+          ...previous,
+          germanyExpenses: previous.germanyExpenses.filter((item) => item.id !== id),
+          rows: [scenarioRow, ...previous.rows],
+          germanyMonthExclusions: remapExclusions
+        };
+      }
+
+      const row = previous.rows.find((item) => item.id === id && item.kind === "expense" && item.country === "DE");
+      if (!row) return previous;
+      const regularRow: GermanyRecurringExpense = {
+        id: row.id,
+        title: row.title,
+        group: groupNames("expense").includes(row.group) ? row.group : defaultGroup("expense"),
+        currency: effectiveRowCurrency(row),
+        amount: nonNegativeNumber(effectiveRowAmount(row, partTimeNet.net, mainNet.net)),
+        frequency: row.frequency === "once" ? "monthly" : row.frequency,
+        startMonth: row.startMonth || germanyViewMonth || previous.startMonth,
+        endMonth: row.endMonth || "",
+        active: row.active
+      };
+      return {
+        ...previous,
+        rows: previous.rows.filter((item) => item.id !== id),
+        germanyExpenses: [regularRow, ...previous.germanyExpenses],
+        germanyMonthExclusions: remapExclusions
+      };
+    });
+  }
+
   function deleteGermanyMonthRow(source: "regular" | "scenario", id: string) {
-    setGermanyExpenseEditor((current) => current?.source === source && current.id === id ? null : current);
     if (source === "scenario") {
       deleteRow(id);
       return;
@@ -808,106 +862,19 @@ export default function MigrationPlanner({
     }));
   }
 
-  function openGermanyExpenseEditor(row: {
-    source: "regular" | "scenario";
-    id: string;
-    group: string;
-    title: string;
-    currency: Currency;
-    amount: number;
-    frequency: Frequency;
-    startMonth: string;
-    endMonth: string;
-    checked: boolean;
-  }) {
-    setGermanyExpenseEditor({
-      source: row.source,
-      id: row.id,
-      isNew: false,
-      checked: row.checked,
-      group: row.group,
-      title: row.title,
-      currency: row.currency,
-      amount: String(row.amount),
-      frequency: row.frequency,
-      startMonth: row.startMonth || germanyViewMonth || plan.startMonth,
-      endMonth: row.endMonth || ""
-    });
-  }
-
   function addGermanyExpense() {
-    setGermanyExpenseEditor({
-      source: "regular",
+    const row: GermanyRecurringExpense = {
       id: uuid(),
-      isNew: true,
-      checked: true,
-      group: defaultGroup("expense"),
       title: "Новый расход Германия",
+      group: defaultGroup("expense"),
       currency: "EUR",
-      amount: "0",
+      amount: 0,
       frequency: "monthly",
       startMonth: germanyViewMonth || plan.startMonth,
-      endMonth: ""
-    });
-  }
-
-  function saveGermanyExpense(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!germanyExpenseEditor) return;
-
-    const draft = germanyExpenseEditor;
-    const startMonth = normalizeMonthValue(draft.startMonth, germanyViewMonth || plan.startMonth);
-    const endMonth = draft.endMonth && monthIndex(draft.endMonth) >= monthIndex(startMonth) ? draft.endMonth : "";
-    const title = draft.title.trim() || "Расход Германии";
-    const amount = nonNegativeNumber(draft.amount);
-    const group = groupNames("expense").includes(draft.group) ? draft.group : defaultGroup("expense");
-
-    if (draft.source === "regular") {
-      const nextRow: GermanyRecurringExpense = {
-        id: draft.id,
-        title,
-        group,
-        currency: draft.currency,
-        amount,
-        frequency: draft.frequency === "once" ? "monthly" : draft.frequency,
-        startMonth,
-        endMonth,
-        active: true
-      };
-      setDirtyPlan((previous) => ({
-        ...previous,
-        germanyExpenses: draft.isNew
-          ? [nextRow, ...previous.germanyExpenses]
-          : previous.germanyExpenses.map((row) => row.id === draft.id ? nextRow : row)
-      }));
-    } else {
-      setDirtyPlan((previous) => ({
-        ...previous,
-        rows: previous.rows.map((row) => row.id === draft.id ? {
-          ...row,
-          title,
-          group,
-          currency: draft.currency,
-          amount,
-          autoSource: "",
-          frequency: draft.frequency,
-          startMonth,
-          endMonth,
-          active: true,
-          kind: "expense",
-          country: "DE"
-        } : row)
-      }));
-    }
-
-    const exclusionKey = germanyMonthExclusionKey(draft.source, draft.id, germanyViewMonth);
-    setDirtyPlan((previous) => ({
-      ...previous,
-      germanyMonthExclusions: draft.checked
-        ? previous.germanyMonthExclusions.filter((key) => key !== exclusionKey)
-        : [...new Set([...previous.germanyMonthExclusions, exclusionKey])]
-    }));
-    setGermanyExpenseEditor(null);
+      endMonth: "",
+      active: true
+    };
+    setDirtyPlan((previous) => ({ ...previous, germanyExpenses: [row, ...previous.germanyExpenses] }));
   }
 
   function addRow(kind: RowKind) {
@@ -1361,17 +1328,17 @@ export default function MigrationPlanner({
             <div className="tablebox germanyExpenseTableBox">
               <div className="thead germanyExpenseHead">
                 <div>✓</div>
+                <div>Тип</div>
                 <div>Статья</div>
                 <div>Комментарий</div>
-                <div>Период</div>
-                <div>Сумма</div>
+                <div>Параметры</div>
                 <div></div>
               </div>
-              <div className="tbody">
+              <div className="tbody germanyExpenseBody">
                 {germanyMonthRows.length === 0 && <div className="empty">Нет расходов Германии за {monthLabel(germanyViewMonth)}.</div>}
                 {germanyMonthRows.map((row) => (
-                  <div className={`germanyExpenseRow ${row.source} ${row.checked ? "" : "excluded"}`} key={`${row.source}-${row.id}`}>
-                    <label className="checkcell">
+                  <div className={`germanyExpenseInlineRow ${row.source} ${row.checked ? "" : "excluded"}`} key={`${row.source}-${row.id}`}>
+                    <label className="checkcell germanyInlineCheck">
                       <input
                         type="checkbox"
                         checked={row.checked}
@@ -1379,28 +1346,107 @@ export default function MigrationPlanner({
                       />
                       <span />
                     </label>
-                    <div className="cell germanyExpenseGroup">{row.group}</div>
-                    <div className="cell germanyExpenseComment">
-                      <span>{row.title}</span>
-                      <em>{row.badge}</em>
+
+                    <select
+                      className="germanyInlineControl germanyTypeSelect"
+                      value={row.source}
+                      aria-label="Тип расхода"
+                      onChange={(event) => changeGermanyExpenseType(row.source, row.id, event.target.value as "regular" | "scenario")}
+                    >
+                      <option value="regular">Регулярный</option>
+                      <option value="scenario">Сценарный</option>
+                    </select>
+
+                    <select
+                      className="germanyInlineControl germanyGroupSelect"
+                      value={row.group}
+                      aria-label="Статья расхода"
+                      onChange={(event) => row.source === "regular"
+                        ? updateGermanyExpense(row.id, { group: event.target.value })
+                        : updateRow(row.id, { group: event.target.value })}
+                    >
+                      {expenseCategoryNames.map((name) => <option key={name} value={name}>{name}</option>)}
+                    </select>
+
+                    <input
+                      className="germanyInlineControl germanyTitleInput"
+                      value={row.title}
+                      aria-label="Комментарий расхода"
+                      onChange={(event) => row.source === "regular"
+                        ? updateGermanyExpense(row.id, { title: event.target.value })
+                        : updateRow(row.id, { title: event.target.value })}
+                    />
+
+                    <select
+                      className="germanyInlineControl germanyFrequencySelect"
+                      value={row.frequency}
+                      aria-label="Частота расхода"
+                      onChange={(event) => row.source === "regular"
+                        ? updateGermanyExpense(row.id, { frequency: event.target.value as GermanyRecurringExpense["frequency"] })
+                        : updateRow(row.id, { frequency: event.target.value as Frequency })}
+                    >
+                      {row.source === "scenario" && <option value="once">Разово</option>}
+                      <option value="monthly">Ежемесячно</option>
+                      <option value="quarterly">Ежеквартально</option>
+                      <option value="yearly">Ежегодно</option>
+                    </select>
+
+                    <div className="germanyInlinePeriod">
+                      <input
+                        type="month"
+                        className="germanyInlineControl"
+                        value={row.startMonth}
+                        min={plan.startMonth}
+                        aria-label="Начало действия"
+                        onChange={(event) => row.source === "regular"
+                          ? updateGermanyExpense(row.id, { startMonth: event.target.value })
+                          : updateRow(row.id, { startMonth: event.target.value })}
+                      />
+                      <input
+                        type="month"
+                        className="germanyInlineControl"
+                        value={row.endMonth}
+                        min={row.startMonth || plan.startMonth}
+                        aria-label="Окончание действия"
+                        onChange={(event) => row.source === "regular"
+                          ? updateGermanyExpense(row.id, { endMonth: event.target.value })
+                          : updateRow(row.id, { endMonth: event.target.value })}
+                      />
                     </div>
-                    <div className="cell germanyExpensePeriod">
-                      {row.frequency === "once"
-                        ? monthLabel(row.startMonth)
-                        : `${monthLabel(row.startMonth)}${row.endMonth ? ` — ${monthLabel(row.endMonth)}` : ""}`}
+
+                    <div className="germanyInlineMoney">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        className="germanyInlineControl"
+                        value={row.amount}
+                        aria-label="Сумма расхода"
+                        onChange={(event) => row.source === "regular"
+                          ? updateGermanyExpense(row.id, { amount: Math.max(Number(event.target.value || 0), 0) })
+                          : updateRow(row.id, { amount: Math.max(Number(event.target.value || 0), 0), autoSource: "" })}
+                      />
+                      <select
+                        className="germanyInlineControl germanyCurrencySelect"
+                        value={row.currency}
+                        aria-label="Валюта расхода"
+                        onChange={(event) => row.source === "regular"
+                          ? updateGermanyExpense(row.id, { currency: event.target.value as Currency })
+                          : updateRow(row.id, { currency: event.target.value as Currency, autoSource: "" })}
+                      >
+                        <option value="EUR">€</option>
+                        <option value="KZT">₸</option>
+                      </select>
                     </div>
-                    <div className="amount expense">−{fmt(row.amount, row.currency)}</div>
-                    <div className="rowactions germanyExpenseActions">
-                      <button className="edit" type="button" title="Редактировать" onClick={() => openGermanyExpenseEditor(row)}>✎</button>
-                      <button
-                        className="delete"
-                        type="button"
-                        title="Удалить"
-                        onClick={() => {
-                          if (window.confirm(`Удалить «${row.title}»?`)) deleteGermanyMonthRow(row.source, row.id);
-                        }}
-                      >×</button>
-                    </div>
+
+                    <button
+                      className="delete germanyInlineDelete"
+                      type="button"
+                      title="Удалить"
+                      onClick={() => {
+                        if (window.confirm(`Удалить «${row.title}»?`)) deleteGermanyMonthRow(row.source, row.id);
+                      }}
+                    >×</button>
                   </div>
                 ))}
               </div>
@@ -1498,95 +1544,6 @@ export default function MigrationPlanner({
 
       </div>
 
-      {germanyExpenseEditor && (
-        <div className="modal show">
-          <form className="modal-card compact germanyExpenseModal" onSubmit={saveGermanyExpense}>
-            <div className="modal-head">
-              <h3>{germanyExpenseEditor.isNew ? "Новый расход Германии" : "Редактировать расход"}</h3>
-              <button type="button" onClick={() => setGermanyExpenseEditor(null)}>×</button>
-            </div>
-
-            <div className="formgrid">
-              <label>Тип
-                <select value="expense" disabled>
-                  <option value="expense">Расход</option>
-                </select>
-              </label>
-              <label>Статья
-                <select
-                  value={germanyExpenseEditor.group}
-                  onChange={(event) => setGermanyExpenseEditor({ ...germanyExpenseEditor, group: event.target.value })}
-                >
-                  {expenseCategoryNames.map((name) => <option key={name} value={name}>{name}</option>)}
-                </select>
-              </label>
-              <label>Сумма
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={germanyExpenseEditor.amount}
-                  onChange={(event) => setGermanyExpenseEditor({ ...germanyExpenseEditor, amount: event.target.value })}
-                />
-              </label>
-              <label>Валюта
-                <select
-                  value={germanyExpenseEditor.currency}
-                  onChange={(event) => setGermanyExpenseEditor({ ...germanyExpenseEditor, currency: event.target.value as Currency })}
-                >
-                  <option value="EUR">EUR · €</option>
-                  <option value="KZT">KZT · ₸</option>
-                </select>
-              </label>
-              <label>Частота
-                <select
-                  value={germanyExpenseEditor.frequency}
-                  onChange={(event) => setGermanyExpenseEditor({ ...germanyExpenseEditor, frequency: event.target.value as Frequency })}
-                >
-                  {germanyExpenseEditor.source === "scenario" && <option value="once">Разово</option>}
-                  <option value="monthly">Ежемесячно</option>
-                  <option value="quarterly">Ежеквартально</option>
-                  <option value="yearly">Ежегодно</option>
-                </select>
-              </label>
-              <label>С
-                <MonthPicker
-                  value={germanyExpenseEditor.startMonth}
-                  min={plan.startMonth}
-                  onChange={(value) => value && setGermanyExpenseEditor({ ...germanyExpenseEditor, startMonth: value, endMonth: germanyExpenseEditor.endMonth && monthIndex(germanyExpenseEditor.endMonth) < monthIndex(value) ? "" : germanyExpenseEditor.endMonth })}
-                />
-              </label>
-              <label>До
-                <MonthPicker
-                  value={germanyExpenseEditor.endMonth}
-                  min={germanyExpenseEditor.startMonth}
-                  nullable
-                  onChange={(value) => setGermanyExpenseEditor({ ...germanyExpenseEditor, endMonth: value || "" })}
-                />
-              </label>
-              <label className="wide">Комментарий
-                <input
-                  value={germanyExpenseEditor.title}
-                  onChange={(event) => setGermanyExpenseEditor({ ...germanyExpenseEditor, title: event.target.value })}
-                />
-              </label>
-              <label className="checkLine wide">
-                <input
-                  type="checkbox"
-                  checked={germanyExpenseEditor.checked}
-                  onChange={(event) => setGermanyExpenseEditor({ ...germanyExpenseEditor, checked: event.target.checked })}
-                />
-                учитывать в {monthLabel(germanyViewMonth)}
-              </label>
-            </div>
-
-            <div className="modal-actions">
-              <button type="button" className="btn" onClick={() => setGermanyExpenseEditor(null)}>Отмена</button>
-              <button className="btn blue" type="submit">Сохранить</button>
-            </div>
-          </form>
-        </div>
-      )}
     </section>
   );
 }

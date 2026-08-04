@@ -2788,16 +2788,6 @@ select {
   width: 158px;
 }
 
-.germanyExpenseModal {
-  width: min(620px, calc(100vw - 28px));
-}
-
-.germanyExpenseModal .checkLine.wide {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 @media (max-width: 1280px) {
   .germanyDashboard {
     grid-template-columns: 1fr;
@@ -2877,5 +2867,172 @@ select {
   .germanyExpenseActions {
     grid-column: 4;
     grid-row: 1 / 3;
+  }
+}
+
+/* Germany diary: controls are always open, without edit mode or modal */
+.germanyDashboard {
+  grid-template-columns: minmax(560px, .95fr) minmax(0, 1.7fr);
+  align-items: start;
+}
+
+.germanyExpenseTableBox {
+  grid-template-rows: 34px auto 40px;
+}
+
+.germanyExpenseHead {
+  grid-template-columns: 30px 104px 126px minmax(150px, 1fr) 180px 28px;
+  min-height: 34px;
+  gap: 6px;
+  padding: 0 8px;
+}
+
+.germanyExpenseBody {
+  max-height: min(52vh, 540px) !important;
+}
+
+.germanyExpenseInlineRow {
+  display: grid;
+  grid-template-columns: 30px 104px 126px minmax(150px, 1fr) 28px;
+  grid-template-areas:
+    "check type group title delete"
+    "check frequency period money delete";
+  align-items: center;
+  gap: 6px;
+  min-height: 76px;
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+}
+
+.germanyExpenseInlineRow.excluded {
+  opacity: .58;
+  background: #f8fafc;
+}
+
+.germanyInlineCheck {
+  grid-area: check;
+}
+
+.germanyTypeSelect {
+  grid-area: type;
+}
+
+.germanyGroupSelect {
+  grid-area: group;
+}
+
+.germanyTitleInput {
+  grid-area: title;
+}
+
+.germanyFrequencySelect {
+  grid-area: frequency;
+}
+
+.germanyInlinePeriod {
+  grid-area: period;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  min-width: 0;
+}
+
+.germanyInlineMoney {
+  grid-area: money;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 46px;
+  gap: 5px;
+  min-width: 0;
+}
+
+.germanyInlineDelete {
+  grid-area: delete;
+  align-self: stretch;
+  width: 28px;
+  min-height: 28px;
+  padding: 0;
+  border: 1px solid #f0c4bf;
+  border-radius: 7px;
+  background: #fff;
+  color: var(--red);
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.germanyInlineDelete:hover {
+  background: #fff1ef;
+  border-color: #e9968e;
+}
+
+.germanyInlineControl {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  padding: 0 7px;
+  border: 1px solid #cfd9e8;
+  border-radius: 7px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 10px;
+}
+
+.germanyInlineControl:focus {
+  outline: 2px solid rgba(37, 99, 235, .18);
+  border-color: #7d9dd8;
+}
+
+.germanyCurrencySelect {
+  padding: 0 3px;
+  text-align: center;
+}
+
+.germanyForecastBox {
+  max-height: min(68vh, 680px);
+}
+
+@media (max-width: 1380px) {
+  .germanyDashboard {
+    grid-template-columns: minmax(520px, .95fr) minmax(0, 1.55fr);
+  }
+
+  .germanyExpenseHead {
+    grid-template-columns: 30px 94px 112px minmax(130px, 1fr) 160px 28px;
+  }
+
+  .germanyExpenseInlineRow {
+    grid-template-columns: 30px 94px 112px minmax(130px, 1fr) 28px;
+  }
+}
+
+@media (max-width: 1180px) {
+  .germanyDashboard {
+    grid-template-columns: 1fr;
+  }
+
+  .germanyExpenseHead {
+    grid-template-columns: 30px 130px 150px minmax(180px, 1fr) 210px 28px;
+  }
+
+  .germanyExpenseInlineRow {
+    grid-template-columns: 30px 130px 150px minmax(180px, 1fr) 28px;
+  }
+}
+
+@media (max-width: 760px) {
+  .germanyExpenseHead {
+    display: none;
+  }
+
+  .germanyExpenseInlineRow {
+    grid-template-columns: 30px minmax(105px, .8fr) minmax(120px, 1fr) 28px;
+    grid-template-areas:
+      "check type group delete"
+      "check title title delete"
+      "check frequency period delete"
+      "check money money delete";
+    min-height: 132px;
   }
 }

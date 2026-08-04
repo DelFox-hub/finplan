@@ -331,6 +331,8 @@ export default function MigrationPlanner({
   const [forecastView, setForecastView] = useState<"summary" | "detail">("summary");
   const [showKzCard, setShowKzCard] = useState(false);
   const [showSalaryCard, setShowSalaryCard] = useState(false);
+  const [showScenarioParams, setShowScenarioParams] = useState(false);
+  const [showScenarioSummary, setShowScenarioSummary] = useState(false);
 
   useEffect(() => {
     loadPlan();
@@ -572,26 +574,39 @@ export default function MigrationPlanner({
 
       {message && <div className="plannerMessage">{message}</div>}
 
-      <div className="scenarioBar">
-        <label>Начало сценария<MonthPicker value={plan.startMonth} min={diaryStartMonth} onChange={(value) => updateStartMonth(value || diaryStartMonth)} /></label>
-        <label>Горизонт, месяцев<input type="number" min="1" max="120" value={plan.months} onChange={(e) => updatePlan({ months: Number(e.target.value || 1) })} /></label>
-        <label>Курс EUR → KZT<input type="number" min="1" value={plan.eurKzt} onChange={(e) => updatePlan({ eurKzt: Number(e.target.value || 1) })} /></label>
-        <label>Резерв в EUR<input type="number" value={plan.startBalanceEur} onChange={(e) => updatePlan({ startBalanceEur: Number(e.target.value || 0) })} /></label>
-        <div className="autoBalanceBox">
-          <span>Стартовый остаток KZT</span>
-          <b>{fmt(startBalance)}</b>
-          <small>автоматически из дневника</small>
-        </div>
+      <div className="plannerInfoToggles plannerTopToggles">
+        <button type="button" className={`plannerInfoBtn ${showScenarioParams ? "active" : ""}`} onClick={() => setShowScenarioParams((v) => !v)}>
+          {showScenarioParams ? "Скрыть" : "Показать"} параметры сценария
+        </button>
+        <button type="button" className={`plannerInfoBtn ${showScenarioSummary ? "active" : ""}`} onClick={() => setShowScenarioSummary((v) => !v)}>
+          {showScenarioSummary ? "Скрыть" : "Показать"} сводку сценария
+        </button>
       </div>
 
-      <div className="plannerKpis">
-        <div><span>Без ухода в минус</span><b>{summary.safeMonths} мес.</b></div>
-        <div><span>Первый минус</span><b className={summary.firstNegative ? "bad" : "ok"}>{summary.firstNegative ? monthLabel(summary.firstNegative) : "нет"}</b></div>
-        <div><span>Минимальный остаток</span><b className={summary.min < 0 ? "bad" : "ok"}>{fmt(summary.min)}</b></div>
-        <div><span>На конец горизонта</span><b className={summary.endKzt < 0 ? "bad" : "ok"}>{fmt(summary.endKzt)}</b></div>
-        <div><span>Доходы всего</span><b>{fmt(summary.totalIncome)}</b></div>
-        <div><span>Расходы всего</span><b>{fmt(summary.totalExpense)}</b></div>
-      </div>
+      {showScenarioParams && (
+        <div className="scenarioBar">
+          <label>Начало сценария<MonthPicker value={plan.startMonth} min={diaryStartMonth} onChange={(value) => updateStartMonth(value || diaryStartMonth)} /></label>
+          <label>Горизонт, месяцев<input type="number" min="1" max="120" value={plan.months} onChange={(e) => updatePlan({ months: Number(e.target.value || 1) })} /></label>
+          <label>Курс EUR → KZT<input type="number" min="1" value={plan.eurKzt} onChange={(e) => updatePlan({ eurKzt: Number(e.target.value || 1) })} /></label>
+          <label>Резерв в EUR<input type="number" value={plan.startBalanceEur} onChange={(e) => updatePlan({ startBalanceEur: Number(e.target.value || 0) })} /></label>
+          <div className="autoBalanceBox">
+            <span>Стартовый остаток KZT</span>
+            <b>{fmt(startBalance)}</b>
+            <small>автоматически из дневника</small>
+          </div>
+        </div>
+      )}
+
+      {showScenarioSummary && (
+        <div className="plannerKpis">
+          <div><span>Без ухода в минус</span><b>{summary.safeMonths} мес.</b></div>
+          <div><span>Первый минус</span><b className={summary.firstNegative ? "bad" : "ok"}>{summary.firstNegative ? monthLabel(summary.firstNegative) : "нет"}</b></div>
+          <div><span>Минимальный остаток</span><b className={summary.min < 0 ? "bad" : "ok"}>{fmt(summary.min)}</b></div>
+          <div><span>На конец горизонта</span><b className={summary.endKzt < 0 ? "bad" : "ok"}>{fmt(summary.endKzt)}</b></div>
+          <div><span>Доходы всего</span><b>{fmt(summary.totalIncome)}</b></div>
+          <div><span>Расходы всего</span><b>{fmt(summary.totalExpense)}</b></div>
+        </div>
+      )}
 
       <div className="plannerWorkspace plannerWorkspaceStacked">
         <div className="plannerInfoToggles">

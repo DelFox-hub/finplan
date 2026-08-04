@@ -2643,3 +2643,188 @@ select {
     max-height: none;
   }
 }
+
+
+/* calmer relocation planner */
+.plannerTopToggles {
+  margin-top: -2px;
+  margin-bottom: -2px;
+}
+
+.scenarioBar {
+  gap: 10px;
+  padding: 12px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #fbfcfe 0%, #f8fafc 100%);
+}
+
+.scenarioBar label {
+  padding: 8px 10px;
+  border: 1px solid #edf1f7;
+  border-radius: 12px;
+  background: #fff;
+  font-size: 12px;
+}
+
+.scenarioBar input,
+.scenarioBar select {
+  height: 34px;
+}
+
+.autoBalanceBox {
+  min-height: 68px;
+  padding: 10px 12px;
+}
+
+.plannerKpis {
+  gap: 10px;
+}
+
+.plannerKpis > div {
+  min-height: 74px;
+  padding: 11px 12px;
+  border-radius: 14px;
+}
+
+.plannerKpis span {
+  font-size: 11px;
+}
+
+.plannerKpis b {
+  font-size: 18px;
+}
+
+.plannerMatrixWrap {
+  max-height: 46vh;
+}
+
+.wideTableWrap {
+  max-height: 40vh;
+}
+
+.sourceTable,
+.plannerMatrix {
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.sourceTable th,
+.sourceTable td,
+.plannerMatrix th,
+.plannerMatrix td {
+  padding: 8px 10px;
+  border-right: 1px solid #e7edf5;
+  border-bottom: 1px solid #e7edf5;
+}
+
+.sourceTable th,
+.plannerMatrix th {
+  background: #f7f9fc;
+  font-size: 11px;
+}
+
+.sourceTable td {
+  min-height: 42px;
+}
+
+.sourceTable input,
+.sourceTable select {
+  height: 32px;
+  font-size: 12px;
+  border-radius: 9px;
+}
+
+.sourceTable .titleInput {
+  min-width: 190px;
+}
+
+.amountEditor {
+  grid-template-columns: 100px 52px;
+}
+
+.periodEditor {
+  grid-template-columns: minmax(220px, 1fr) 14px minmax(220px, 1fr);
+  gap: 6px;
+}
+
+.periodEditor .monthPicker {
+  grid-template-columns: minmax(140px, 1fr) 78px 22px;
+}
+
+.periodEditor .monthPicker select {
+  font-size: 11px;
+}
+
+.rowTools button {
+  width: 30px;
+  height: 30px;
+}
+
+.plannerMatrix .stickyCol {
+  min-width: 190px;
+}
+
+.plannerMatrix .totalIncomeRow th,
+.plannerMatrix .totalIncomeRow td,
+.plannerMatrix .incomeSection th,
+.plannerMatrix .incomeSection td {
+  background: #f2faf5;
+  color: #1f7a53;
+}
+
+.plannerMatrix .totalExpenseRow th,
+.plannerMatrix .totalExpenseRow td,
+.plannerMatrix .expenseSection th,
+.plannerMatrix .expenseSection td {
+  background: #fdf5f4;
+  color: #c23f2b;
+}
+
+.plannerMatrix .netRow th,
+.plannerMatrix .netRow td {
+  background: #f2f6ff;
+}
+
+.plannerMatrix .cumulativeRow th,
+.plannerMatrix .cumulativeRow td {
+  background: #fff8e7;
+}
+
+.plannerMatrix .detailRow th,
+.plannerMatrix .detailRow td {
+  background: #ffffff;
+  color: #5f6b7c;
+}
+
+.plannerMatrix .detailRow:nth-child(even) th,
+.plannerMatrix .detailRow:nth-child(even) td {
+  background: #fbfcfe;
+}
+
+.plannerMatrix .countrySection th,
+.plannerMatrix .countrySection td {
+  background: #eef2f8;
+  color: #23314d;
+}
+
+.countryNetRow.kzNet th,
+.countryNetRow.kzNet td {
+  background: #f2faf5;
+  color: #1f7a53;
+}
+
+.countryNetRow.deNet th,
+.countryNetRow.deNet td {
+  background: #f3f6fd;
+  color: #3256b5;
+}
+
+.countryNetRow.otherNet th,
+.countryNetRow.otherNet td {
+  background: #fff8ef;
+  color: #9a5a11;
+}
+
+.badCell {
+  background: #fff4f3 !important;
+}

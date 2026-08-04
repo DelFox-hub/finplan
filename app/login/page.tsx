@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@/lib/supabase/browser";
+import { createClient, hasSupabasePublicEnv } from "@/lib/supabase/browser";
+
 
 export default function LoginPage() {
-  const supabase = createClient();
+  const configured = hasSupabasePublicEnv();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
@@ -13,6 +14,12 @@ export default function LoginPage() {
     e.preventDefault();
     setMessage("");
 
+    if (!configured) {
+      setMessage("Supabase не настроен. Добавь NEXT_PUBLIC_SUPABASE_URL и NEXT_PUBLIC_SUPABASE_ANON_KEY в переменные окружения Vercel.");
+      return;
+    }
+
+    const supabase = createClient();
     const { error } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password
@@ -55,10 +62,15 @@ export default function LoginPage() {
           />
         </label>
 
-        <button className="primaryBtn" type="submit">
+        <button className="primaryBtn" type="submit" disabled={!configured}>
           Войти
         </button>
 
+        {!configured && (
+          <div className="loginMessage">
+            Для входа добавь NEXT_PUBLIC_SUPABASE_URL и NEXT_PUBLIC_SUPABASE_ANON_KEY в Environment Variables проекта Vercel.
+          </div>
+        )}
         {message && <div className="loginMessage">{message}</div>}
       </form>
     </main>

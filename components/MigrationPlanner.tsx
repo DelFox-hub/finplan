@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import MonthPicker from "@/components/MonthPicker";
 import { createClient } from "@/lib/supabase/browser";
 import { trackRelocationSave } from "@/lib/relocationSaveCoordinator";
+import type { ExchangeRateSnapshot } from "@/lib/exchangeRate";
 
 type Currency = "KZT" | "EUR";
 type Country = "DE" | "OTHER";
@@ -50,7 +51,11 @@ type PlanRow = {
 type MigrationPlan = {
   startMonth: string;
   months: number;
-  eurKzt: number;
+  eurKztBuy: number;
+  eurKztSell: number;
+  eurKztSource: "mig.kz" | "";
+  eurKztUpdatedAt: string;
+  eurKztCheckedAt: string;
   startBalanceEur: number;
   grossPartTime: number;
   grossMain: number;
@@ -88,6 +93,7 @@ type MigrationPlannerProps = {
   incomeCategories: CategoryOption[];
   getDiaryMonthPlan: (month: string) => DiaryMonthPlan;
   getDiaryBalanceBeforeMonth: (month: string) => number;
+  exchangeRate: ExchangeRateSnapshot | null;
 };
 
 const supabase = createClient();
@@ -161,7 +167,11 @@ function defaultPlan(startMonth = currentMonth()): MigrationPlan {
   return {
     startMonth,
     months: 36,
-    eurKzt: 650,
+    eurKztBuy: 0,
+    eurKztSell: 0,
+    eurKztSource: "",
+    eurKztUpdatedAt: "",
+    eurKztCheckedAt: "",
     startBalanceEur: 0,
     grossPartTime: 1300,
     grossMain: 4500,
@@ -268,12 +278,21 @@ function rowApplies(row: PlanRow, month: string, planStart: string) {
   return false;
 }
 
-function toKzt(amount: number, currency: Currency, eurKzt: number) {
-  return currency === "EUR" ? amount * eurKzt : amount;
+function validExchangeRate(value: unknown) {
+  const rate = Number(value);
+  return Number.isFinite(rate) && rate > 0 ? rate : 0;
 }
 
-function fromKzt(amountKzt: number, currency: Currency, eurKzt: number) {
-  return currency === "EUR" ? amountKzt / Math.max(Number(eurKzt || 1), 1) : amountKzt;
+function toKzt(amount: number, currency: Currency, eurRate: number) {
+  if (currency !== "EUR") return amount;
+  const rate = validExchangeRate(eurRate);
+  return rate > 0 ? amount * rate : 0;
+}
+
+function fromKzt(amountKzt: number, currency: Currency, eurSellRate: number) {
+  if (currency !== "EUR") return amountKzt;
+  const rate = validExchangeRate(eurSellRate);
+  return rate > 0 ? amountKzt / rate : 0;
 }
 
 function effectiveRowAmount(row: PlanRow, partTimeNet: number, mainNet: number) {
@@ -328,6 +347,9 @@ function roughGermanIncomeTax2026(x: number) {
 function normalizePlan(input: Partial<MigrationPlan> | null | undefined, diaryStartMonth: string): MigrationPlan {
   const base = defaultPlan(currentMonth());
   const raw = input || {};
+  const rawWithLegacyRate = raw as Partial<MigrationPlan> & { eurKzt?: unknown; eurKztSource?: unknown };
+  const rawWithoutLegacyRate = { ...rawWithLegacyRate };
+  delete rawWithoutLegacyRate.eurKzt;
   const rawRows = Array.isArray(raw.rows) ? raw.rows : base.rows;
   const normalizedDiaryStart = normalizeMonthValue(diaryStartMonth);
   const requestedStart = normalizeMonthValue(raw.startMonth, base.startMonth);
@@ -402,12 +424,21 @@ function normalizePlan(input: Partial<MigrationPlan> | null | undefined, diarySt
       }))]
     : [];
 
+  const storedRateIsAutomatic = rawWithLegacyRate.eurKztSource === "mig.kz";
+  const legacyAutomaticRate = storedRateIsAutomatic ? validExchangeRate(rawWithLegacyRate.eurKzt) : 0;
+  const storedBuyRate = storedRateIsAutomatic ? validExchangeRate(raw.eurKztBuy) || legacyAutomaticRate : 0;
+  const storedSellRate = storedRateIsAutomatic ? validExchangeRate(raw.eurKztSell) || legacyAutomaticRate : 0;
+
   return {
     ...base,
-    ...raw,
+    ...rawWithoutLegacyRate,
     startMonth: safeStart,
     months: Math.min(Math.max(Math.round(safeNumber(raw.months, base.months)), 1), 120),
-    eurKzt: Math.max(safeNumber(raw.eurKzt, base.eurKzt), 1),
+    eurKztBuy: storedBuyRate,
+    eurKztSell: storedSellRate,
+    eurKztSource: storedBuyRate > 0 && storedSellRate > 0 ? "mig.kz" : "",
+    eurKztUpdatedAt: typeof raw.eurKztUpdatedAt === "string" ? raw.eurKztUpdatedAt : "",
+    eurKztCheckedAt: typeof raw.eurKztCheckedAt === "string" ? raw.eurKztCheckedAt : "",
     startBalanceEur: nonNegativeNumber(raw.startBalanceEur),
     grossPartTime: nonNegativeNumber(raw.grossPartTime, base.grossPartTime),
     grossMain: nonNegativeNumber(raw.grossMain, base.grossMain),
@@ -426,7 +457,8 @@ export default function MigrationPlanner({
   expenseCategories,
   incomeCategories,
   getDiaryMonthPlan,
-  getDiaryBalanceBeforeMonth
+  getDiaryBalanceBeforeMonth,
+  exchangeRate
 }: MigrationPlannerProps) {
   const [plan, setPlan] = useState<MigrationPlan>(() => defaultPlan(currentMonth()));
   const [loading, setLoading] = useState(true);
@@ -452,6 +484,23 @@ export default function MigrationPlanner({
     loadPlan();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
+
+  useEffect(() => {
+    if (loading || !exchangeRate) return;
+    const previous = latestPlanRef.current;
+    const previousCheckedAt = Date.parse(previous.eurKztCheckedAt || "");
+    const incomingCheckedAt = Date.parse(exchangeRate.checkedAt);
+    if (Number.isFinite(previousCheckedAt) && previousCheckedAt >= incomingCheckedAt) return;
+
+    setDirtyPlan((current) => ({
+      ...current,
+      eurKztBuy: exchangeRate.buy,
+      eurKztSell: exchangeRate.sell,
+      eurKztSource: "mig.kz",
+      eurKztUpdatedAt: exchangeRate.sourceUpdatedAt,
+      eurKztCheckedAt: exchangeRate.checkedAt
+    }));
+  }, [exchangeRate, loading]);
 
   useEffect(() => {
     const syncPlan = (event: Event) => {
@@ -786,9 +835,15 @@ export default function MigrationPlanner({
     return [...new Set(names.length ? names : ["Расходы"])];
   }, [expenseCategories]);
 
+  // Всегда используем самый свежий курс из общего загрузчика. Сохранённый в плане
+  // снимок нужен только как резерв при временной недоступности mig.kz.
+  const eurBuyRate = validExchangeRate(exchangeRate?.buy) || validExchangeRate(plan.eurKztBuy);
+  const eurSellRate = validExchangeRate(exchangeRate?.sell) || validExchangeRate(plan.eurKztSell);
+  const exchangeRateReady = eurBuyRate > 0 && eurSellRate > 0;
+
   const germanyData = useMemo<GermanyForecastMonth[]>(() => {
     const months = Array.from({ length: Math.max(Number(plan.months || 1), 1) }, (_, index) => addMonths(plan.startMonth, index));
-    let cumulativeKzt = getDiaryBalanceBeforeMonth(plan.startMonth) + Number(plan.startBalanceEur || 0) * Number(plan.eurKzt || 1);
+    let cumulativeKzt = getDiaryBalanceBeforeMonth(plan.startMonth) + toKzt(Number(plan.startBalanceEur || 0), "EUR", eurBuyRate);
     const partTimeNetLocal = calcGermanNet(Number(plan.grossPartTime || 0), plan).net;
     const mainNetLocal = calcGermanNet(Number(plan.grossMain || 0), plan).net;
 
@@ -804,7 +859,7 @@ export default function MigrationPlanner({
         const amountKzt = toKzt(
           Math.max(effectiveRowAmount(row, partTimeNetLocal, mainNetLocal), 0),
           effectiveRowCurrency(row),
-          Number(plan.eurKzt || 1)
+          row.kind === "income" ? eurBuyRate : eurSellRate
         );
         const names = row.kind === "income" ? incomeCategoryNames : expenseCategoryNames;
         const target = row.kind === "income" ? germanyIncomeBy : germanyExpenseBy;
@@ -817,7 +872,7 @@ export default function MigrationPlanner({
         if (!germanyExpenseApplies(row, month, plan.startMonth)) return;
         if (plan.germanyMonthExclusions.includes(germanyMonthExclusionKey("regular", row.id, month))) return;
 
-        const amountKzt = toKzt(Math.max(Number(row.amount || 0), 0), row.currency, Number(plan.eurKzt || 1));
+        const amountKzt = toKzt(Math.max(Number(row.amount || 0), 0), row.currency, eurSellRate);
         const fallback = expenseCategoryNames.includes("Другое") ? "Другое" : expenseCategoryNames[0];
         const group = expenseCategoryNames.includes(row.group) ? row.group : fallback;
         germanyExpenseBy[group] = Number(germanyExpenseBy[group] || 0) + amountKzt;
@@ -846,7 +901,7 @@ export default function MigrationPlanner({
         kzExpenseKzt
       };
     });
-  }, [plan, incomeCategoryNames, expenseCategoryNames, getDiaryBalanceBeforeMonth, getDiaryMonthPlan]);
+  }, [plan, incomeCategoryNames, expenseCategoryNames, getDiaryBalanceBeforeMonth, getDiaryMonthPlan, eurBuyRate, eurSellRate]);
 
   const summary = useMemo(() => {
     const min = Math.min(...germanyData.map((m) => m.cumulativeKzt), 0);
@@ -867,7 +922,7 @@ export default function MigrationPlanner({
 
   const partTimeNet = calcGermanNet(Number(plan.grossPartTime || 0), plan);
   const mainNet = calcGermanNet(Number(plan.grossMain || 0), plan);
-  const matrixValue = (amountKzt: number) => compact(fromKzt(amountKzt, matrixCurrency, Number(plan.eurKzt || 1)));
+  const matrixValue = (amountKzt: number) => compact(fromKzt(amountKzt, matrixCurrency, eurSellRate));
   const startBalance = getDiaryBalanceBeforeMonth(plan.startMonth);
 
   const germanyMonthRows = useMemo(() => {
@@ -882,7 +937,7 @@ export default function MigrationPlanner({
         currency: row.currency,
         badge: row.frequency === "monthly" ? "регулярно" : row.frequency === "quarterly" ? "квартал" : "год",
         checked: !isGermanyMonthExcluded("regular", row.id, germanyViewMonth),
-        amountKzt: toKzt(Math.max(Number(row.amount || 0), 0), row.currency, Number(plan.eurKzt || 1))
+        amountKzt: toKzt(Math.max(Number(row.amount || 0), 0), row.currency, eurSellRate)
       }));
 
     const scenario = plan.rows
@@ -899,12 +954,12 @@ export default function MigrationPlanner({
           currency,
           badge: row.frequency === "once" ? "разово" : row.frequency === "monthly" ? "ежемесячно" : row.frequency === "quarterly" ? "квартал" : "год",
           checked: !isGermanyMonthExcluded("scenario", row.id, germanyViewMonth),
-          amountKzt: toKzt(amount, currency, Number(plan.eurKzt || 1))
+          amountKzt: toKzt(amount, currency, eurSellRate)
         };
       });
 
     return [...recurring, ...scenario].sort((a, b) => Number(b.checked) - Number(a.checked) || b.amountKzt - a.amountKzt);
-  }, [plan, germanyViewMonth, partTimeNet.net, mainNet.net]);
+  }, [plan, germanyViewMonth, partTimeNet.net, mainNet.net, eurSellRate]);
 
   const germanyMonthTotal = useMemo(
     () => germanyMonthRows.filter((row) => row.checked).reduce((sum, row) => sum + row.amountKzt, 0),
@@ -1105,7 +1160,11 @@ export default function MigrationPlanner({
         <div className="scenarioBar">
           <label>Начало сценария<MonthPicker value={plan.startMonth} min={diaryStartMonth} onChange={(value) => updateStartMonth(value || diaryStartMonth)} /></label>
           <label>Горизонт, месяцев<input type="number" min="1" max="120" value={plan.months} onChange={(e) => updatePlan({ months: Number(e.target.value || 1) })} /></label>
-          <label>Курс EUR → KZT<input type="number" min="1" value={plan.eurKzt} onChange={(e) => updatePlan({ eurKzt: Number(e.target.value || 1) })} /></label>
+          <div className="autoBalanceBox exchangeRateScenarioBox">
+            <span>Автоматический курс EUR</span>
+            <b>{exchangeRateReady ? `покупка ${compact(eurBuyRate)} ₸ · продажа ${compact(eurSellRate)} ₸` : "курс недоступен"}</b>
+            <small>источник: mig.kz · ручное изменение отключено</small>
+          </div>
           <label>Резерв в EUR<input type="number" min="0" value={plan.startBalanceEur} onChange={(e) => updatePlan({ startBalanceEur: Math.max(Number(e.target.value || 0), 0) })} /></label>
           <div className="autoBalanceBox">
             <span>Стартовый остаток KZT</span>
@@ -1220,7 +1279,7 @@ export default function MigrationPlanner({
                 <span className="hint">статьи общие с Казахстаном · горизонт {germanyData.length} мес. · в окне видно около 15 месяцев</span>
               </div>
               <div className="matrixCurrencyTools">
-                <span>1 € = {compact(plan.eurKzt)} ₸</span>
+                <span>{exchangeRateReady ? `EUR: ${compact(eurBuyRate)} / ${compact(eurSellRate)} ₸` : "EUR: курс недоступен"}</span>
                 <div className="currencyToggle" role="group" aria-label="Валюта таблицы">
                   <button type="button" className={matrixCurrency === "KZT" ? "active" : ""} onClick={() => setMatrixCurrency("KZT")}>₸</button>
                   <button type="button" className={matrixCurrency === "EUR" ? "active" : ""} onClick={() => setMatrixCurrency("EUR")}>€</button>

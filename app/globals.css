@@ -157,7 +157,7 @@ select {
 
 .slimbar {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) auto;
+  grid-template-columns: minmax(220px, 1fr) auto auto;
   align-items: center;
   gap: 12px;
   min-height: 60px;
@@ -190,6 +190,59 @@ select {
   color: #fff;
 }
 
+.exchangeRateInfo {
+  min-width: 285px;
+  padding: 7px 11px 8px;
+  border: 1px solid rgba(255, 255, 255, .2);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .1);
+  display: grid;
+  gap: 1px;
+  line-height: 1.15;
+}
+
+.exchangeRateInfoTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, .72);
+}
+
+.exchangeRateInfoTop em {
+  font-style: normal;
+  font-size: 9px;
+  color: rgba(255, 255, 255, .58);
+}
+
+.exchangeRateInfo b {
+  margin-top: 2px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.exchangeRateInfo small {
+  font-size: 10px;
+  font-weight: 650;
+  color: rgba(255, 255, 255, .66);
+  white-space: nowrap;
+}
+
+.exchangeRateInfo.loading,
+.exchangeRateInfo.refreshing {
+  border-color: rgba(191, 219, 254, .58);
+}
+
+.exchangeRateInfo.stale,
+.exchangeRateInfo.error {
+  border-color: rgba(253, 230, 138, .7);
+  background: rgba(120, 53, 15, .22);
+}
 
 .headerTabs {
   justify-self: end;
@@ -1622,6 +1675,15 @@ select {
   .headerTabs {
     justify-self: start;
     width: 100%;
+  }
+
+  .exchangeRateInfo {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .exchangeRateInfo small {
+    white-space: normal;
   }
 
   .diaryPanel .panel-head {

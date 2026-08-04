@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 import MigrationPlanner from "@/components/MigrationPlanner";
 import GermanySettings from "@/components/GermanySettings";
 import MonthPicker from "@/components/MonthPicker";
 import { waitForRelocationSaves } from "@/lib/relocationSaveCoordinator";
+import type { ExchangeRateSnapshot } from "@/lib/exchangeRate";
 
 type Kind = "income" | "expense";
 type PaymentType = "regular" | "credit";
@@ -298,6 +299,85 @@ function compareSettingsValues(left: unknown, right: unknown) {
   return String(left ?? "").localeCompare(String(right ?? ""), "ru", { numeric: true, sensitivity: "base" });
 }
 
+const EXCHANGE_RATE_CACHE_KEY = "finance-diary:eur-kzt:mig:v1";
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+type ExchangeRateStatus = "idle" | "loading" | "refreshing" | "ready" | "stale" | "error";
+
+function isExchangeRateSnapshot(value: unknown): value is ExchangeRateSnapshot {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Partial<ExchangeRateSnapshot>;
+  return item.currency === "EUR"
+    && item.baseCurrency === "KZT"
+    && item.source === "mig.kz"
+    && item.rateType === "sell"
+    && Number.isFinite(Number(item.buy))
+    && Number(item.buy) > 0
+    && Number.isFinite(Number(item.sell))
+    && Number(item.sell) > 0
+    && Number(item.sell) >= Number(item.buy)
+    && Number.isFinite(Date.parse(String(item.sourceUpdatedAt || "")))
+    && Number.isFinite(Date.parse(String(item.checkedAt || "")));
+}
+
+function readCachedExchangeRate() {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(EXCHANGE_RATE_CACHE_KEY);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    return isExchangeRateSnapshot(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function almatyDateParts(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Almaty",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return { year: Number(values.year), month: Number(values.month), day: Number(values.day) };
+}
+
+function almatyRefreshBoundary(date = new Date()) {
+  const { year, month, day } = almatyDateParts(date);
+  const todayAtEight = Date.UTC(year, month - 1, day, 3, 0, 0); // 08:00 Asia/Almaty = 03:00 UTC
+  return date.getTime() >= todayAtEight ? todayAtEight : todayAtEight - DAY_MS;
+}
+
+function nextAlmatyRefreshAt(date = new Date()) {
+  const { year, month, day } = almatyDateParts(date);
+  const todayAtEight = Date.UTC(year, month - 1, day, 3, 0, 0);
+  return date.getTime() < todayAtEight ? todayAtEight : todayAtEight + DAY_MS;
+}
+
+function exchangeRateIsDue(snapshot: ExchangeRateSnapshot | null, date = new Date()) {
+  if (!snapshot) return true;
+  const checkedAt = Date.parse(snapshot.checkedAt);
+  return !Number.isFinite(checkedAt) || checkedAt < almatyRefreshBoundary(date);
+}
+
+function formatExchangeRateTime(value: string) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "время источника не указано";
+  return new Intl.DateTimeFormat("ru-RU", {
+    timeZone: "Asia/Almaty",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).format(date).replace(",", " ·");
+}
+
+function formatExchangeRateValue(value: number) {
+  return Number(value).toLocaleString("ru-RU", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
 
 export default function FinanceApp({ userId }: { userId: string }) {
   const [loading, setLoading] = useState(true);
@@ -311,6 +391,10 @@ export default function FinanceApp({ userId }: { userId: string }) {
   const [incomes, setIncomes] = useState<RecurringIncome[]>([]);
   const [exclusions, setExclusions] = useState<PaymentExclusion[]>([]);
   const [collapsedGroups, setCollapsedGroups] = useState<CollapsedGroup[]>([]);
+  const [exchangeRate, setExchangeRate] = useState<ExchangeRateSnapshot | null>(null);
+  const [exchangeRateStatus, setExchangeRateStatus] = useState<ExchangeRateStatus>("idle");
+  const [exchangeRateError, setExchangeRateError] = useState("");
+  const exchangeRateRequestRef = useRef<Promise<void> | null>(null);
 
   const [viewMonth, setViewMonthState] = useState(currentMonth());
   const [opsPage, setOpsPage] = useState(1);
@@ -355,6 +439,84 @@ export default function FinanceApp({ userId }: { userId: string }) {
   const diaryStart = settings?.diary_start_month || settings?.calc_start_month || currentMonth();
   const forecastStart = settings?.forecast_start_month || settings?.calc_start_month || currentMonth();
   const calcStart = monthFromIndex(Math.min(monthIndex(diaryStart), monthIndex(forecastStart)));
+
+  const refreshExchangeRate = useCallback(async (force = false) => {
+    const cached = readCachedExchangeRate();
+    if (cached) setExchangeRate(cached);
+
+    if (!force && cached && !exchangeRateIsDue(cached)) {
+      setExchangeRateStatus("ready");
+      setExchangeRateError("");
+      return;
+    }
+
+    if (exchangeRateRequestRef.current) return exchangeRateRequestRef.current;
+    setExchangeRateStatus(cached ? "refreshing" : "loading");
+    setExchangeRateError("");
+
+    const request = (async () => {
+      try {
+        const response = await fetch("/api/exchange-rate", { cache: "no-store" });
+        const payload: unknown = await response.json();
+        if (!response.ok) {
+          const message = payload && typeof payload === "object" && "error" in payload
+            ? String((payload as { error?: unknown }).error || "Не удалось обновить курс")
+            : "Не удалось обновить курс";
+          throw new Error(message);
+        }
+        if (!isExchangeRateSnapshot(payload)) throw new Error("Сервис курса вернул некорректные данные");
+
+        window.localStorage.setItem(EXCHANGE_RATE_CACHE_KEY, JSON.stringify(payload));
+        setExchangeRate(payload);
+        setExchangeRateStatus("ready");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Не удалось обновить курс";
+        setExchangeRateError(message);
+        setExchangeRateStatus(cached ? "stale" : "error");
+      } finally {
+        exchangeRateRequestRef.current = null;
+      }
+    })();
+
+    exchangeRateRequestRef.current = request;
+    return request;
+  }, []);
+
+  useEffect(() => {
+    const cached = readCachedExchangeRate();
+    if (cached) {
+      setExchangeRate(cached);
+      setExchangeRateStatus(exchangeRateIsDue(cached) ? "stale" : "ready");
+    }
+    void refreshExchangeRate(false);
+
+    let timer: number | null = null;
+    const scheduleNext = () => {
+      const delay = Math.max(nextAlmatyRefreshAt() - Date.now(), 1000);
+      timer = window.setTimeout(async () => {
+        await refreshExchangeRate(true);
+        scheduleNext();
+      }, delay);
+    };
+    scheduleNext();
+
+    // После неудачного запроса повторяем проверку раз в 15 минут. Если дневной
+    // курс уже получен, refreshExchangeRate завершится без сетевого запроса.
+    const retryInterval = window.setInterval(() => {
+      void refreshExchangeRate(false);
+    }, 15 * 60 * 1000);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") void refreshExchangeRate(false);
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      if (timer !== null) window.clearTimeout(timer);
+      window.clearInterval(retryInterval);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [refreshExchangeRate]);
 
   useEffect(() => {
     loadAll();
@@ -1780,6 +1942,24 @@ export default function FinanceApp({ userId }: { userId: string }) {
             </div>
           </div>
 
+          <div
+            className={`exchangeRateInfo ${exchangeRateStatus}`}
+            title={exchangeRateError || "Фактические курсы покупки и продажи EUR в обменных пунктах МиГ"}
+          >
+            <div className="exchangeRateInfoTop">
+              <span>EUR · МиГ</span>
+              <em>{exchangeRateStatus === "refreshing" || exchangeRateStatus === "loading" ? "обновление" : "автокурс"}</em>
+            </div>
+            <b>{exchangeRate ? `покупка ${formatExchangeRateValue(exchangeRate.buy)} · продажа ${formatExchangeRateValue(exchangeRate.sell)} ₸` : "Курс недоступен"}</b>
+            <small>
+              {exchangeRate
+                ? `курс на ${formatExchangeRateTime(exchangeRate.sourceUpdatedAt)}`
+                : exchangeRateStatus === "loading"
+                  ? "получаем данные с mig.kz"
+                  : "не удалось получить данные"}
+            </small>
+          </div>
+
           <nav className="mainTabs headerTabs">
             <button type="button" className={`mainTab ${mainTab === "diary" ? "active" : ""}`} onClick={() => setMainTab("diary")}>
               Казахстан
@@ -1978,6 +2158,7 @@ export default function FinanceApp({ userId }: { userId: string }) {
             incomeCategories={incomeCategories}
             getDiaryMonthPlan={oneMonthPlan}
             getDiaryBalanceBeforeMonth={balanceBeforeMonth}
+            exchangeRate={exchangeRate}
           />
         )}
 

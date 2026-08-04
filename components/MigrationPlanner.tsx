@@ -430,7 +430,7 @@ export default function MigrationPlanner({
   useEffect(() => {
     const updatePageSize = () => {
       const width = window.innerWidth;
-      setMatrixPageSize(width < 620 ? 4 : width < 980 ? 12 : width < 1400 ? 20 : 24);
+      setMatrixPageSize(width < 620 ? 4 : width < 900 ? 6 : width < 1200 ? 8 : width < 1600 ? 10 : 12);
     };
     updatePageSize();
     window.addEventListener("resize", updatePageSize);

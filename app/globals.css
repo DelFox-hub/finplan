@@ -3821,29 +3821,34 @@ select {
 }
 
 
-/* Germany forecast: narrow month columns and collapsible article groups */
+/* Germany forecast: readable compact month columns and collapsible article groups */
 .germanyForecastBox .matrix {
   width: max-content;
-  min-width: 0;
+  min-width: 100%;
 }
 
 .germanyForecastBox .matrix th:not(.corner):not(.rowhead),
 .germanyForecastBox .matrix td {
-  width: 42px;
-  min-width: 42px;
-  max-width: 42px;
-  padding: 0 3px;
-  font-size: 10px;
+  width: 72px;
+  min-width: 72px;
+  max-width: 72px;
+  padding: 0 6px;
+  font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.germanyForecastBox .matrix thead th:not(.corner) {
+  font-size: 10px;
 }
 
 .germanyForecastBox .matrix .corner,
 .germanyForecastBox .matrix .rowhead {
-  width: 184px;
-  min-width: 184px;
-  max-width: 184px;
+  width: 190px;
+  min-width: 190px;
+  max-width: 190px;
 }
 
 .forecastGroupToggle {
@@ -3880,18 +3885,36 @@ select {
   padding-left: 34px;
 }
 
-@media (max-width: 620px) {
+@media (max-width: 900px) {
   .germanyForecastBox .matrix th:not(.corner):not(.rowhead),
   .germanyForecastBox .matrix td {
-    width: 48px;
-    min-width: 48px;
-    max-width: 48px;
+    width: 68px;
+    min-width: 68px;
+    max-width: 68px;
+    padding: 0 5px;
   }
 
   .germanyForecastBox .matrix .corner,
   .germanyForecastBox .matrix .rowhead {
-    width: 138px;
-    min-width: 138px;
-    max-width: 138px;
+    width: 160px;
+    min-width: 160px;
+    max-width: 160px;
+  }
+}
+
+@media (max-width: 620px) {
+  .germanyForecastBox .matrix th:not(.corner):not(.rowhead),
+  .germanyForecastBox .matrix td {
+    width: 64px;
+    min-width: 64px;
+    max-width: 64px;
+    font-size: 10px;
+  }
+
+  .germanyForecastBox .matrix .corner,
+  .germanyForecastBox .matrix .rowhead {
+    width: 140px;
+    min-width: 140px;
+    max-width: 140px;
   }
 }

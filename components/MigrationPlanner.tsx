@@ -1498,7 +1498,7 @@ export default function MigrationPlanner({
             <div className="panel-head forecastPanelHead">
               <div>
                 <h2>Календарный прогноз</h2>
-                <span className="hint">статьи общие с Казахстаном · горизонт {germanyData.length} мес. · в окне видно около 15 месяцев</span>
+                <span className="hint">статьи общие с Казахстаном · горизонт {germanyData.length} мес. · доступна горизонтальная прокрутка</span>
               </div>
               <div className="matrixCurrencyTools">
                 <span>{exchangeRateReady ? `EUR: ${compact(eurBuyRate)} / ${compact(eurSellRate)} ₸` : "EUR: курс недоступен"}</span>

@@ -18,6 +18,18 @@ type DiaryMonthPlan = {
   net: number;
 };
 
+type GermanyRecurringExpense = {
+  id: string;
+  title: string;
+  group: string;
+  currency: Currency;
+  amount: number;
+  frequency: Exclude<Frequency, "once">;
+  startMonth: string;
+  endMonth: string;
+  active: boolean;
+};
+
 type PlanRow = {
   id: string;
   kind: RowKind;
@@ -45,6 +57,7 @@ type MigrationPlan = {
   hasChildren: boolean;
   churchTax: boolean;
   rows: PlanRow[];
+  germanyExpenses: GermanyRecurringExpense[];
 };
 
 type MonthPlan = {
@@ -57,6 +70,7 @@ type MonthPlan = {
   kzIncomeBy: Record<string, number>;
   kzExpenseBy: Record<string, number>;
   scenarioByRowKzt: Record<string, number>;
+  germanyExpenseByIdKzt: Record<string, number>;
 };
 
 type CategoryOption = {
@@ -169,32 +183,6 @@ function defaultPlan(startMonth = currentMonth()): MigrationPlan {
       {
         id: uuid(),
         kind: "expense",
-        title: "Питание Германия",
-        country: "DE",
-        currency: "EUR",
-        amount: 250,
-        frequency: "monthly",
-        startMonth: addMonths(startMonth, 10),
-        endMonth: "",
-        active: true,
-        group: "питание"
-      },
-      {
-        id: uuid(),
-        kind: "expense",
-        title: "Транспорт Германия",
-        country: "DE",
-        currency: "EUR",
-        amount: 80,
-        frequency: "monthly",
-        startMonth: addMonths(startMonth, 10),
-        endMonth: "",
-        active: true,
-        group: "транспорт"
-      },
-      {
-        id: uuid(),
-        kind: "expense",
         title: "Билеты",
         country: "DE",
         currency: "KZT",
@@ -205,8 +193,43 @@ function defaultPlan(startMonth = currentMonth()): MigrationPlan {
         active: true,
         group: "переезд"
       }
+    ],
+    germanyExpenses: [
+      {
+        id: uuid(),
+        title: "Питание Германия",
+        group: "питание",
+        currency: "EUR",
+        amount: 250,
+        frequency: "monthly",
+        startMonth: addMonths(startMonth, 10),
+        endMonth: "",
+        active: true
+      },
+      {
+        id: uuid(),
+        title: "Транспорт Германия",
+        group: "транспорт",
+        currency: "EUR",
+        amount: 80,
+        frequency: "monthly",
+        startMonth: addMonths(startMonth, 10),
+        endMonth: "",
+        active: true
+      }
     ]
   };
+}
+
+function germanyExpenseApplies(row: GermanyRecurringExpense, month: string, planStart: string) {
+  if (!row.active) return false;
+  const startMonth = row.startMonth || planStart;
+  if (monthIndex(month) < monthIndex(startMonth)) return false;
+  if (row.endMonth && monthIndex(month) > monthIndex(row.endMonth)) return false;
+  const diff = monthIndex(month) - monthIndex(startMonth);
+  if (row.frequency === "monthly") return true;
+  if (row.frequency === "quarterly") return diff % 3 === 0;
+  return diff % 12 === 0;
 }
 
 function rowApplies(row: PlanRow, month: string, planStart: string) {
@@ -283,9 +306,35 @@ function roughGermanIncomeTax2026(x: number) {
 function normalizePlan(input: Partial<MigrationPlan> | null | undefined, diaryStartMonth: string): MigrationPlan {
   const base = defaultPlan(currentMonth());
   const raw = input || {};
-  const rows = Array.isArray(raw.rows) ? raw.rows : base.rows;
+  const rawRows = Array.isArray(raw.rows) ? raw.rows : base.rows;
   const requestedStart = raw.startMonth || base.startMonth;
   const safeStart = monthIndex(requestedStart) < monthIndex(diaryStartMonth) ? diaryStartMonth : requestedStart;
+
+  const migratedGermanyRows = rawRows.filter((row: any) => row?.country === "DE" && row?.kind === "expense" && row?.frequency !== "once");
+  const savedGermanyExpenses = Array.isArray((raw as any).germanyExpenses) ? (raw as any).germanyExpenses : [];
+  const germanyExpenseSource = [...savedGermanyExpenses, ...migratedGermanyRows];
+  const seenGermanyIds = new Set<string>();
+  const germanyExpenses = germanyExpenseSource
+    .map((row: any) => {
+      const rowStart = row.startMonth && monthIndex(row.startMonth) >= monthIndex(safeStart) ? row.startMonth : safeStart;
+      const rowEnd = row.endMonth && monthIndex(row.endMonth) >= monthIndex(rowStart) ? row.endMonth : "";
+      return {
+        id: row.id || uuid(),
+        title: row.title || "Расход Германия",
+        group: row.group || "расход",
+        currency: row.currency === "KZT" ? "KZT" as Currency : "EUR" as Currency,
+        amount: Number(row.amount || 0),
+        frequency: (["monthly", "quarterly", "yearly"].includes(row.frequency) ? row.frequency : "monthly") as GermanyRecurringExpense["frequency"],
+        startMonth: rowStart,
+        endMonth: rowEnd,
+        active: row.active !== false
+      };
+    })
+    .filter((row) => {
+      if (seenGermanyIds.has(row.id)) return false;
+      seenGermanyIds.add(row.id);
+      return true;
+    });
 
   return {
     ...base,
@@ -299,8 +348,10 @@ function normalizePlan(input: Partial<MigrationPlan> | null | undefined, diarySt
     kkAdditional: Math.max(Number(raw.kkAdditional ?? base.kkAdditional), 0),
     hasChildren: !!raw.hasChildren,
     churchTax: !!raw.churchTax,
-    rows: rows
+    germanyExpenses,
+    rows: rawRows
       .filter((row: any) => row.country !== "KZ")
+      .filter((row: any) => !(row.country === "DE" && row.kind === "expense" && row.frequency !== "once"))
       .map((row: any) => {
         const rowStart = row.startMonth && monthIndex(row.startMonth) >= monthIndex(safeStart) ? row.startMonth : safeStart;
         const rowEnd = row.endMonth && monthIndex(row.endMonth) >= monthIndex(rowStart) ? row.endMonth : "";
@@ -312,7 +363,9 @@ function normalizePlan(input: Partial<MigrationPlan> | null | undefined, diarySt
           currency: row.currency === "EUR" ? "EUR" : "KZT",
           amount: Number(row.amount || 0),
           autoSource: row.autoSource === "partTimeNet" || row.autoSource === "mainNet" ? row.autoSource : "",
-          frequency: ["monthly", "quarterly", "yearly", "once"].includes(row.frequency) ? row.frequency : "monthly",
+          frequency: row.kind === "expense" && row.country === "DE"
+            ? "once"
+            : (["monthly", "quarterly", "yearly", "once"].includes(row.frequency) ? row.frequency : "monthly"),
           startMonth: rowStart,
           endMonth: rowEnd,
           active: row.active !== false,
@@ -352,6 +405,13 @@ export default function MigrationPlanner({
 
   useEffect(() => {
     loadPlan();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
+
+  useEffect(() => {
+    const reload = () => void loadPlan();
+    window.addEventListener("relocation-plan-updated", reload);
+    return () => window.removeEventListener("relocation-plan-updated", reload);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
@@ -416,8 +476,14 @@ export default function MigrationPlanner({
         changed = true;
         return { ...row, group: allowed[0] };
       });
+      const allowedExpenses = groupNames("expense");
+      const germanyExpenses = previous.germanyExpenses.map((row) => {
+        if (allowedExpenses.includes(row.group)) return row;
+        changed = true;
+        return { ...row, group: allowedExpenses[0] };
+      });
       if (changed) setDirty(true);
-      return changed ? { ...previous, rows } : previous;
+      return changed ? { ...previous, rows, germanyExpenses } : previous;
     });
   }, [expenseCategories, incomeCategories, loading]);
 
@@ -503,7 +569,11 @@ export default function MigrationPlanner({
       rows: previous.rows.map((row) => {
         if (row.id !== id) return row;
         const next = { ...row, ...patch };
-        if (patch.kind && patch.kind !== row.kind) next.group = defaultGroup(patch.kind);
+        if (patch.kind && patch.kind !== row.kind) {
+          next.group = defaultGroup(patch.kind);
+          if (patch.kind === "expense" && next.country === "DE") next.frequency = "once";
+        }
+        if (patch.country === "DE" && next.kind === "expense") next.frequency = "once";
         if (!groupNames(next.kind).includes(next.group)) next.group = defaultGroup(next.kind);
         if (patch.startMonth && next.endMonth && monthIndex(next.endMonth) < monthIndex(patch.startMonth)) next.endMonth = "";
         if (patch.endMonth && monthIndex(patch.endMonth) < monthIndex(next.startMonth || previous.startMonth)) next.endMonth = "";
@@ -522,7 +592,7 @@ export default function MigrationPlanner({
       currency: "EUR",
       amount: 0,
       autoSource: "",
-      frequency: "monthly",
+      frequency: kind === "expense" ? "once" : "monthly",
       startMonth: plan.startMonth,
       endMonth: "",
       active: true,
@@ -555,6 +625,7 @@ export default function MigrationPlanner({
       let incomeKzt = Number(diary.incomeTotal || 0);
       let expenseKzt = Number(diary.expenseTotal || 0);
       const scenarioByRowKzt: Record<string, number> = {};
+      const germanyExpenseByIdKzt: Record<string, number> = {};
 
       const partTimeNetLocal = calcGermanNet(Number(plan.grossPartTime || 0), plan).net;
       const mainNetLocal = calcGermanNet(Number(plan.grossMain || 0), plan).net;
@@ -576,6 +647,15 @@ export default function MigrationPlanner({
         }
       });
 
+      plan.germanyExpenses.forEach((row) => {
+        germanyExpenseByIdKzt[row.id] = 0;
+        if (!germanyExpenseApplies(row, month, plan.startMonth)) return;
+        const amountKzt = toKzt(Number(row.amount || 0), row.currency, Number(plan.eurKzt || 1));
+        germanyExpenseByIdKzt[row.id] = amountKzt;
+        expenseKzt += amountKzt;
+        byCountry.DE.expenseKzt += amountKzt;
+      });
+
       const netKzt = incomeKzt - expenseKzt;
       cumulativeKzt += netKzt;
 
@@ -588,7 +668,8 @@ export default function MigrationPlanner({
         byCountry,
         kzIncomeBy: diary.incomeBy || {},
         kzExpenseBy: diary.expenseBy || {},
-        scenarioByRowKzt
+        scenarioByRowKzt,
+        germanyExpenseByIdKzt
       };
     });
   }, [plan, getDiaryBalanceBeforeMonth, getDiaryMonthPlan]);
@@ -840,7 +921,7 @@ export default function MigrationPlanner({
                     </tr>
                   ))}
 
-                  <tr className="countrySection"><th className="stickyCol">Германия</th>{visibleData.map((month) => <td key={`de-title-${month.month}`}></td>)}</tr>
+                  <tr className="countrySection"><th className="stickyCol">Германия · настройки + сценарий</th>{visibleData.map((month) => <td key={`de-title-${month.month}`}></td>)}</tr>
                   <tr className="section incomeSection"><th className="stickyCol">Доходы</th>{visibleData.map((month) => <td key={`dei-${month.month}`}>{matrixValue(month.byCountry.DE.incomeKzt)}</td>)}</tr>
                   {scenarioRowsByCountry("DE", "income").map((row) => (
                     <tr className="detailRow" key={`de-income-${row.id}`}>
@@ -849,6 +930,12 @@ export default function MigrationPlanner({
                     </tr>
                   ))}
                   <tr className="section expenseSection"><th className="stickyCol">Расходы</th>{visibleData.map((month) => <td key={`dee-${month.month}`}>{matrixValue(month.byCountry.DE.expenseKzt)}</td>)}</tr>
+                  {plan.germanyExpenses.filter((row) => row.active).map((row) => (
+                    <tr className="detailRow" key={`de-regular-expense-${row.id}`}>
+                      <th className="stickyCol">{row.title}</th>
+                      {visibleData.map((month) => <td key={`de-regular-expense-${row.id}-${month.month}`}>{matrixValue(month.germanyExpenseByIdKzt[row.id] || 0)}</td>)}
+                    </tr>
+                  ))}
                   {scenarioRowsByCountry("DE", "expense").map((row) => (
                     <tr className="detailRow" key={`de-expense-${row.id}`}>
                       <th className="stickyCol">{row.title}</th>
@@ -882,7 +969,7 @@ export default function MigrationPlanner({
           <div className="sourcesHead">
             <div>
               <h3>Германия и прочие сценарные статьи</h3>
-              <p>Группа выбирается из статей в настройках. Строки сохраняются автоматически.</p>
+              <p>Здесь остаются доходы и разовые сценарные расходы. Регулярные расходы Германии настраиваются в разделе «Германия».</p>
             </div>
             <div>
               <button type="button" className="btn blue" onClick={() => addRow("income")}>+ доход</button>
@@ -897,101 +984,111 @@ export default function MigrationPlanner({
           </div>
 
           <div className="scenarioList">
+            <div className="scenarioListHead" aria-hidden="true">
+              <span>on</span>
+              <span>Тип</span>
+              <span>Группа</span>
+              <span>Название</span>
+              <span>Сумма</span>
+              <span>Страна</span>
+              <span>Расчёт</span>
+              <span>Частота</span>
+              <span>Период</span>
+              <span></span>
+            </div>
             {plan.rows.map((row) => (
               <div key={row.id} className={`scenarioItem ${row.kind} ${row.active ? "" : "inactive"}`}>
-                <div className="scenarioItemMain">
-                  <label className="scenarioActive" title="Активность строки">
-                    <input type="checkbox" checked={row.active} onChange={(e) => updateRow(row.id, { active: e.target.checked })} />
-                    <span>on</span>
-                  </label>
+                <label className="scenarioActive" title="Активность строки">
+                  <input type="checkbox" checked={row.active} onChange={(e) => updateRow(row.id, { active: e.target.checked })} />
+                  <span>on</span>
+                </label>
 
-                  <label>
-                    <span>Тип</span>
-                    <select value={row.kind} onChange={(e) => updateRow(row.id, { kind: e.target.value as RowKind })}>
-                      <option value="income">доход</option>
-                      <option value="expense">расход</option>
-                    </select>
-                  </label>
+                <label>
+                  <span>Тип</span>
+                  <select value={row.kind} onChange={(e) => updateRow(row.id, { kind: e.target.value as RowKind })}>
+                    <option value="income">доход</option>
+                    <option value="expense">расход</option>
+                  </select>
+                </label>
 
-                  <label>
-                    <span>Группа</span>
-                    <select value={row.group} onChange={(e) => updateRow(row.id, { group: e.target.value })}>
-                      {groupNames(row.kind).map((name) => <option key={name} value={name}>{name}</option>)}
-                    </select>
-                  </label>
+                <label>
+                  <span>Группа</span>
+                  <select value={row.group} onChange={(e) => updateRow(row.id, { group: e.target.value })}>
+                    {groupNames(row.kind).map((name) => <option key={name} value={name}>{name}</option>)}
+                  </select>
+                </label>
 
-                  <label className="scenarioTitleField">
-                    <span>Название</span>
-                    <input value={row.title} onChange={(e) => updateRow(row.id, { title: e.target.value })} />
-                  </label>
+                <label className="scenarioTitleField">
+                  <span>Название</span>
+                  <input value={row.title} onChange={(e) => updateRow(row.id, { title: e.target.value })} />
+                </label>
 
-                  <label className="scenarioAmountField">
-                    <span>Сумма</span>
-                    <div className="amountEditor">
-                      <input
-                        type="number"
-                        value={row.autoSource ? Math.round(effectiveRowAmount(row, partTimeNet.net, mainNet.net)) : row.amount}
-                        disabled={!!row.autoSource}
-                        onChange={(e) => updateRow(row.id, { amount: Number(e.target.value || 0) })}
-                      />
-                      <select
-                        value={effectiveRowCurrency(row)}
-                        disabled={!!row.autoSource}
-                        onChange={(e) => updateRow(row.id, { currency: e.target.value as Currency })}
-                      >
-                        <option value="KZT">₸</option>
-                        <option value="EUR">€</option>
-                      </select>
-                    </div>
-                  </label>
-
-                  <div className="rowTools scenarioRowTools">
-                    <button type="button" title="Дублировать" onClick={() => duplicateRow(row)}>⧉</button>
-                    <button type="button" title="Удалить" onClick={() => deleteRow(row.id)}>×</button>
-                  </div>
-                </div>
-
-                <div className="scenarioItemDetails">
-                  <label>
-                    <span>Страна</span>
-                    <select value={row.country} onChange={(e) => updateRow(row.id, { country: e.target.value as Country })}>
-                      {Object.entries(countries).map(([key, value]) => <option key={key} value={key}>{value}</option>)}
-                    </select>
-                  </label>
-
-                  <label>
-                    <span>Расчёт</span>
+                <label className="scenarioAmountField">
+                  <span>Сумма</span>
+                  <div className="amountEditor">
+                    <input
+                      type="number"
+                      value={row.autoSource ? Math.round(effectiveRowAmount(row, partTimeNet.net, mainNet.net)) : row.amount}
+                      disabled={!!row.autoSource}
+                      onChange={(e) => updateRow(row.id, { amount: Number(e.target.value || 0) })}
+                    />
                     <select
-                      value={row.autoSource || ""}
-                      onChange={(e) => {
-                        const autoSource = e.target.value as PlanRow["autoSource"];
-                        updateRow(row.id, { autoSource, ...(autoSource ? { currency: "EUR" as Currency } : {}) });
-                      }}
+                      value={effectiveRowCurrency(row)}
+                      disabled={!!row.autoSource}
+                      onChange={(e) => updateRow(row.id, { currency: e.target.value as Currency })}
                     >
-                      <option value="">ручная сумма</option>
-                      <option value="partTimeNet">нетто подработка</option>
-                      <option value="mainNet">нетто основная</option>
+                      <option value="KZT">₸</option>
+                      <option value="EUR">€</option>
                     </select>
-                  </label>
+                  </div>
+                </label>
 
-                  <label>
-                    <span>Частота</span>
-                    <select value={row.frequency} onChange={(e) => updateRow(row.id, { frequency: e.target.value as Frequency })}>
+                <label>
+                  <span>Страна</span>
+                  <select value={row.country} onChange={(e) => updateRow(row.id, { country: e.target.value as Country })}>
+                    {Object.entries(countries).map(([key, value]) => <option key={key} value={key}>{value}</option>)}
+                  </select>
+                </label>
+
+                <label>
+                  <span>Расчёт</span>
+                  <select
+                    value={row.autoSource || ""}
+                    onChange={(e) => {
+                      const autoSource = e.target.value as PlanRow["autoSource"];
+                      updateRow(row.id, { autoSource, ...(autoSource ? { currency: "EUR" as Currency } : {}) });
+                    }}
+                  >
+                    <option value="">ручная сумма</option>
+                    <option value="partTimeNet">нетто подработка</option>
+                    <option value="mainNet">нетто основная</option>
+                  </select>
+                </label>
+
+                <label>
+                  <span>Частота</span>
+                  <select value={row.frequency} onChange={(e) => updateRow(row.id, { frequency: e.target.value as Frequency })}>
+                    {row.kind === "income" || row.country === "OTHER" ? <>
                       <option value="monthly">ежемесячно</option>
                       <option value="quarterly">квартал</option>
                       <option value="yearly">год</option>
-                      <option value="once">разово</option>
-                    </select>
-                  </label>
+                    </> : null}
+                    <option value="once">разово</option>
+                  </select>
+                </label>
 
-                  <label className="scenarioPeriodField">
-                    <span>Период</span>
-                    <div className="periodEditor">
-                      <MonthPicker value={row.startMonth} onChange={(value) => updateRow(row.id, { startMonth: value || row.startMonth })} />
-                      <span>—</span>
-                      <MonthPicker className="periodEndPicker" value={row.endMonth} min={row.startMonth} nullable onChange={(value) => updateRow(row.id, { endMonth: value || "" })} />
-                    </div>
-                  </label>
+                <label className="scenarioPeriodField">
+                  <span>Период</span>
+                  <div className="periodEditor">
+                    <MonthPicker value={row.startMonth} onChange={(value) => updateRow(row.id, { startMonth: value || row.startMonth })} />
+                    <span>—</span>
+                    <MonthPicker className="periodEndPicker" value={row.endMonth} min={row.startMonth} nullable onChange={(value) => updateRow(row.id, { endMonth: value || "" })} />
+                  </div>
+                </label>
+
+                <div className="rowTools scenarioRowTools">
+                  <button type="button" title="Дублировать" onClick={() => duplicateRow(row)}>⧉</button>
+                  <button type="button" title="Удалить" onClick={() => deleteRow(row.id)}>×</button>
                 </div>
               </div>
             ))}

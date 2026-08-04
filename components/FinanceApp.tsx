@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 import MigrationPlanner from "@/components/MigrationPlanner";
+import GermanySettings from "@/components/GermanySettings";
 import MonthPicker from "@/components/MonthPicker";
 
 type Kind = "income" | "expense";
@@ -296,7 +297,7 @@ export default function FinanceApp({ userId }: { userId: string }) {
   const [opsPage, setOpsPage] = useState(1);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [mainTab, setMainTab] = useState<"diary" | "relocation">("diary");
-  const [settingsTab, setSettingsTab] = useState<"main" | "expenses" | "credits" | "incomes" | "categories" | "import">("expenses");
+  const [settingsTab, setSettingsTab] = useState<"main" | "expenses" | "credits" | "incomes" | "germany" | "categories" | "import">("expenses");
   const [saveState, setSaveState] = useState<{ status: "saved" | "saving" | "error"; message: string }>({
     status: "saved",
     message: "Все изменения сохранены"
@@ -1860,11 +1861,12 @@ export default function FinanceApp({ userId }: { userId: string }) {
                 <button type="button" className={settingsTab === "expenses" ? "active" : ""} onClick={() => setSettingsTab("expenses")}>Платежи</button>
                 <button type="button" className={settingsTab === "credits" ? "active" : ""} onClick={() => setSettingsTab("credits")}>Кредиты</button>
                 <button type="button" className={settingsTab === "incomes" ? "active" : ""} onClick={() => setSettingsTab("incomes")}>Доходы</button>
+                <button type="button" className={settingsTab === "germany" ? "active" : ""} onClick={() => setSettingsTab("germany")}>Германия</button>
                 <button type="button" className={settingsTab === "categories" ? "active" : ""} onClick={() => setSettingsTab("categories")}>Статьи</button>
                 <button type="button" className={settingsTab === "import" ? "active" : ""} onClick={() => setSettingsTab("import")}>Импорт</button>
               </nav>
 
-              <section className={`settingsContent ${["expenses", "credits", "incomes", "categories"].includes(settingsTab) ? "settingsContentTableMode" : ""}`}>
+              <section className={`settingsContent ${["expenses", "credits", "incomes", "germany", "categories"].includes(settingsTab) ? "settingsContentTableMode" : ""}`}>
                 {settingsTab === "main" && (
                   <div className="settingsSection">
                     <div className="settingsSectionHead">
@@ -2078,6 +2080,15 @@ export default function FinanceApp({ userId }: { userId: string }) {
                       </div>
                     </section>
                   </div>
+                )}
+
+                {settingsTab === "germany" && (
+                  <GermanySettings
+                    userId={userId}
+                    diaryStartMonth={calcStart}
+                    expenseCategories={expenseCategories}
+                    onSaveState={setSaveState}
+                  />
                 )}
 
                 {settingsTab === "categories" && (

@@ -1323,7 +1323,7 @@ export default function MigrationPlanner({
           </div>
         )}
 
-        <div className="germanyDashboard">
+        <div className="germanyDashboard workspace">
           <section className="panel diaryPanel germanyExpensePanel">
             <div className="panel-head">
               <div>

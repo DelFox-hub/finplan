@@ -1651,7 +1651,7 @@ select {
   }
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 980px) {
   .workspace {
     grid-template-columns: 1fr;
   }
@@ -2437,7 +2437,7 @@ select {
   }
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 980px) {
   .relocationHead,
   .sourcesHead,
   .cardTitleRow {
@@ -2573,7 +2573,8 @@ select {
   padding: 8px 14px;
   align-items: center;
   flex-direction: row;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .germanyExpensePanel .diaryPanelTools {
@@ -2622,6 +2623,7 @@ select {
 .germanyExpenseTableBox {
   min-height: 0;
   height: 100%;
+  overflow: hidden;
   grid-template-rows: 36px minmax(0, 1fr) 40px;
 }
 
@@ -2670,18 +2672,18 @@ select {
 
 .germanyForecastBox .matrix th:not(.corner):not(.rowhead),
 .germanyForecastBox .matrix td {
-  min-width: 78px;
-  max-width: 78px;
-  width: 78px;
+  min-width: 72px;
+  max-width: 72px;
+  width: 72px;
   padding: 0 6px;
   font-size: 12px;
 }
 
 .germanyForecastBox .matrix .corner,
 .germanyForecastBox .matrix .rowhead {
-  min-width: 175px;
-  max-width: 175px;
-  width: 175px;
+  min-width: 155px;
+  max-width: 155px;
+  width: 155px;
 }
 
 @media (max-width: 1450px) and (min-width: 1101px) {
@@ -2725,9 +2727,16 @@ select {
 /* Unified Kazakhstan/Germany diary presentation and inline editing */
 .workspace,
 .germanyDashboard {
-  grid-template-columns: minmax(720px, 50%) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 10px;
   min-height: 680px;
+}
+
+@media (min-width: 1280px) {
+  .workspace,
+  .germanyDashboard {
+    grid-template-columns: minmax(680px, 0.98fr) minmax(0, 1.22fr);
+  }
 }
 
 .workspace .panel,
@@ -2866,11 +2875,11 @@ select {
 
 .germanyExpenseHead,
 .germanyKzRow {
-  grid-template-columns: 32px 64px 100px minmax(130px, 1fr) 205px 100px 32px;
+  grid-template-columns: 32px 56px 92px minmax(120px, 1fr) 182px 86px 28px;
 }
 
 .germanyInlinePeriod {
-  grid-template-columns: 62px minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: 58px minmax(0, 1fr) minmax(0, 1fr);
   gap: 4px;
 }
 
@@ -2886,11 +2895,12 @@ select {
 
 .germanyExpenseBody,
 .workspace .tbody {
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   scrollbar-gutter: stable;
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 980px) {
   .workspace,
   .germanyDashboard {
     grid-template-columns: 1fr;
@@ -2922,4 +2932,59 @@ select {
   .editableOperationRow > .operationCommentEditor { grid-area: comment; }
   .editableOperationRow > .operationAmountInput { grid-area: amount; }
   .editableOperationRow > .rowactions { grid-area: actions; }
+}
+
+.germanyExpensePanel .panel-tools.diaryPanelTools {
+  gap: 8px;
+}
+
+.germanyExpensePanel .diaryMonthInline {
+  min-width: 0;
+}
+
+@media (max-width: 1400px) and (min-width: 981px) {
+  .germanyExpenseHead,
+  .germanyKzRow {
+    grid-template-columns: 32px 50px 84px minmax(90px, 1fr) 166px 78px 26px;
+  }
+
+  .germanyInlinePeriod {
+    grid-template-columns: 52px 1fr 1fr;
+  }
+
+  .germanyInlineControl {
+    font-size: 10px;
+  }
+}
+
+/* FINAL Germany layout: always two panels side by side; do not inherit Kazakhstan stacking breakpoint */
+.germanyDashboard {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+  gap: 10px !important;
+  min-height: 680px;
+  width: 100%;
+  min-width: 0;
+}
+
+.germanyDashboard > .germanyExpensePanel,
+.germanyDashboard > .germanyForecastPanel {
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  align-self: stretch;
+}
+
+/* Explicitly cancel every generic workspace stacking rule for Germany. */
+@media (max-width: 980px) {
+  .germanyDashboard {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+    min-height: 680px !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .germanyDashboard {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+  }
 }

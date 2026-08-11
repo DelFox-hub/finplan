@@ -3006,3 +3006,130 @@ select {
 .germanyKzRow {
   overflow: hidden;
 }
+
+/* Compact one-line Germany salary calculator */
+.salaryCardCompact {
+  padding: 7px 9px;
+  gap: 0;
+  border-radius: 14px;
+}
+
+.salaryCompactRow {
+  display: grid;
+  grid-template-columns: 92px 150px 150px 105px auto auto 128px 128px 118px;
+  align-items: end;
+  gap: 7px;
+  min-width: 0;
+}
+
+.salaryCompactTitle {
+  display: grid;
+  align-self: center;
+  gap: 1px;
+  min-width: 0;
+}
+
+.salaryCompactTitle b {
+  font-size: 12px;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.salaryCompactTitle span,
+.salaryCompactField > span,
+.salaryCompactResult span {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.salaryCompactField {
+  position: relative;
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.salaryCompactField input {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  padding: 0 24px 0 7px;
+  border: 1px solid #cfd9e8;
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+  font-size: 11px;
+}
+
+.salaryCompactField em {
+  position: absolute;
+  right: 8px;
+  bottom: 7px;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.salaryCompactKK input {
+  padding-right: 7px;
+}
+
+.salaryCompactCheck {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  white-space: nowrap;
+  font-size: 10px;
+}
+
+.salaryCompactCheck input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+}
+
+.salaryCompactResult {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  padding: 5px 7px;
+  border: 1px solid #e8edf5;
+  border-radius: 9px;
+  background: #f8fafc;
+}
+
+.salaryCompactResult b {
+  font-size: 12px;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+@media (max-width: 1450px) {
+  .salaryCompactRow {
+    grid-template-columns: 82px 130px 130px 90px auto auto 112px 112px 102px;
+    gap: 5px;
+  }
+
+  .salaryCompactTitle b,
+  .salaryCompactResult b {
+    font-size: 11px;
+  }
+
+  .salaryCompactField input {
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 1120px) {
+  .salaryCompactRow {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: end;
+  }
+
+  .salaryCompactTitle {
+    grid-column: 1 / -1;
+  }
+}

@@ -1299,26 +1299,21 @@ export default function MigrationPlanner({
       <div className="plannerWorkspace plannerWorkspaceStacked">
         {showSalaryCard && (
           <div className="plannerMainGrid compactGrid">
-            <div className="plannerCard compactCard salaryCard">
-              <div className="cardTitleRow">
-                <div>
-                  <h3>Германия · расчёт дохода</h3>
-                  <p>Нетто автоматически подставляется в строки доходов сценария.</p>
+            <div className="plannerCard compactCard salaryCard salaryCardCompact">
+              <div className="salaryCompactRow">
+                <div className="salaryCompactTitle">
+                  <b>Расчёт дохода</b>
+                  <span>Германия</span>
                 </div>
+                <label className="salaryCompactField"><span>Подработка gross</span><input type="number" min="0" value={plan.grossPartTime} onChange={(e) => updatePlan({ grossPartTime: Math.max(Number(e.target.value || 0), 0) })} /><em>€</em></label>
+                <label className="salaryCompactField"><span>Основная gross</span><input type="number" min="0" value={plan.grossMain} onChange={(e) => updatePlan({ grossMain: Math.max(Number(e.target.value || 0), 0) })} /><em>€</em></label>
+                <label className="salaryCompactField salaryCompactKK"><span>Доп. KK</span><input type="number" min="0" step="0.001" value={plan.kkAdditional} onChange={(e) => updatePlan({ kkAdditional: Math.max(Number(e.target.value || 0), 0) })} /></label>
+                <label className="salaryCompactCheck"><input type="checkbox" checked={plan.hasChildren} onChange={(e) => updatePlan({ hasChildren: e.target.checked })} /><span>дети</span></label>
+                <label className="salaryCompactCheck"><input type="checkbox" checked={plan.churchTax} onChange={(e) => updatePlan({ churchTax: e.target.checked })} /><span>церк. налог</span></label>
+                <div className="salaryCompactResult"><span>Подработка netto</span><b>{fmt(partTimeNet.net, "EUR")}</b></div>
+                <div className="salaryCompactResult"><span>Основная netto</span><b>{fmt(mainNet.net, "EUR")}</b></div>
+                <div className="salaryCompactResult"><span>Удержания</span><b>{fmt(mainNet.deductions, "EUR")}</b></div>
               </div>
-              <div className="salaryGrid">
-                <label>Подработка gross, €<input type="number" min="0" value={plan.grossPartTime} onChange={(e) => updatePlan({ grossPartTime: Math.max(Number(e.target.value || 0), 0) })} /></label>
-                <label>Основная gross, €<input type="number" min="0" value={plan.grossMain} onChange={(e) => updatePlan({ grossMain: Math.max(Number(e.target.value || 0), 0) })} /></label>
-                <label>Доп. взнос KK<input type="number" min="0" step="0.001" value={plan.kkAdditional} onChange={(e) => updatePlan({ kkAdditional: Math.max(Number(e.target.value || 0), 0) })} /></label>
-                <label className="checkLine"><input type="checkbox" checked={plan.hasChildren} onChange={(e) => updatePlan({ hasChildren: e.target.checked })} /> есть дети</label>
-                <label className="checkLine"><input type="checkbox" checked={plan.churchTax} onChange={(e) => updatePlan({ churchTax: e.target.checked })} /> церковный налог</label>
-              </div>
-              <div className="salaryResults">
-                <div><span>Подработка netto</span><b>{fmt(partTimeNet.net, "EUR")}</b></div>
-                <div><span>Основная netto</span><b>{fmt(mainNet.net, "EUR")}</b></div>
-                <div><span>Удержания основной</span><b>{fmt(mainNet.deductions, "EUR")}</b></div>
-              </div>
-              <p className="smallWarn">Расчёт ориентировочный. Для точного сценария можно выбрать «ручная сумма» в строке дохода.</p>
             </div>
           </div>
         )}

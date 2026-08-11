@@ -2879,8 +2879,11 @@ select {
 }
 
 .germanyInlinePeriod {
+  display: grid;
   grid-template-columns: 58px minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
   gap: 4px;
+  min-width: 0;
 }
 
 .germanyInlinePeriod .germanyInlineControl {
@@ -2889,8 +2892,11 @@ select {
 }
 
 .germanyInlineMoney {
+  display: grid;
   grid-template-columns: minmax(0, 1fr) 38px;
+  align-items: center;
   gap: 4px;
+  min-width: 0;
 }
 
 .germanyExpenseBody,
@@ -2987,4 +2993,16 @@ select {
   .germanyDashboard {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
   }
+}
+
+/* Germany expense row integrity: keep every editor on one physical row */
+.germanyKzRow > *,
+.germanyInlinePeriod > *,
+.germanyInlineMoney > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.germanyKzRow {
+  overflow: hidden;
 }

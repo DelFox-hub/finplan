@@ -943,13 +943,6 @@ export default function FinanceApp({ userId }: { userId: string }) {
   }
 
   function plannedChecklistItems(month = viewMonth): VirtualOperation[] {
-    const materializedIncomeIds = new Set(
-      operations
-        .filter((operation) => operation.source_recurring_income_id)
-        .filter((operation) => (operation.source_month || operation.op_date.slice(0, 7)) === month)
-        .map((operation) => operation.source_recurring_income_id as string)
-    );
-
     const paymentRows: VirtualPaymentOperation[] = duePayments(month).map((p) => ({
       id: `virtual:payment:${p.id}:${month}`,
       user_id: userId,
@@ -968,35 +961,14 @@ export default function FinanceApp({ userId }: { userId: string }) {
       payment: p
     }));
 
-    const incomeRows: VirtualIncomeOperation[] = dueIncomes(month)
-      .filter((income) => !materializedIncomeIds.has(income.id))
-      .map((income) => ({
-        id: `virtual:income:${income.id}:${month}`,
-        user_id: userId,
-        op_date: dateForDay(month, income.due_day),
-        kind: "income" as Kind,
-        category_id: income.category_id,
-        title: income.title,
-        amount: Number(income.amount || 0),
-        completed: false,
-        sort_order: Number(income.sort_order || 0),
-        source_recurring_payment_id: null,
-        source_recurring_income_id: income.id,
-        source_month: month,
-        virtual: true as const,
-        virtual_kind: "income" as const,
-        income
-      }));
-
-    return [...paymentRows, ...incomeRows]
+    return paymentRows
       .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0) || String(a.op_date).localeCompare(String(b.op_date)));
   }
 
   function checklistOps(month = viewMonth): AnyOperation[] {
-    // Платежи из настроек всегда строятся из актуальных настроек как виртуальные строки.
-    // Старые материализованные копии платежей скрываются, чтобы не было дублей.
-    // Материализованные регулярные доходы, наоборот, остаются видимыми как обычные операции.
-    const real = monthOps(month).filter((o) => !o.source_recurring_payment_id);
+    // Дневник показывает ручные операции и регулярные расходы.
+    // Регулярные доходы участвуют в прогнозе, но не выводятся отдельными строками дневника.
+    const real = monthOps(month).filter((o) => !o.source_recurring_payment_id && !o.source_recurring_income_id);
     const virtual = plannedChecklistItems(month);
     const all: AnyOperation[] = [...real, ...virtual];
     return all.sort((a, b) => {
@@ -1314,34 +1286,50 @@ export default function FinanceApp({ userId }: { userId: string }) {
   const collapsedKeys = new Set(collapsedGroups.filter((g) => g.month === viewMonth && g.collapsed).map((g) => g.category_key));
 
   type DisplayRow = { type: "group"; group: { key: string; title: string; items: AnyOperation[] } } | { type: "op"; op: AnyOperation };
-  const rowsPerPage = 12;
+  const rowsPerPage = 16;
   const displayPages = useMemo<DisplayRow[][]>(() => {
-    const blocks: DisplayRow[][] = opRows
-      .filter((operation) => !operation.completed)
-      .map((operation) => [{ type: "op" as const, op: operation }]);
-
-    groupedDone.forEach((group) => {
-      const block: DisplayRow[] = [{ type: "group", group }];
-      if (!collapsedKeys.has(group.key)) {
-        group.items.forEach((operation) => block.push({ type: "op", op: operation }));
-      }
-      blocks.push(block);
-    });
-
     const pages: DisplayRow[][] = [];
     let current: DisplayRow[] = [];
-    blocks.forEach((block) => {
-      if (current.length > 0 && current.length + block.length > rowsPerPage) {
-        pages.push(current);
-        current = [];
-      }
-      current.push(...block);
-      if (current.length >= rowsPerPage) {
-        pages.push(current);
-        current = [];
-      }
+
+    const flush = () => {
+      if (current.length) pages.push(current);
+      current = [];
+    };
+
+    const pushRow = (row: DisplayRow) => {
+      if (current.length >= rowsPerPage) flush();
+      current.push(row);
+    };
+
+    opRows
+      .filter((operation) => !operation.completed)
+      .forEach((operation) => pushRow({ type: "op", op: operation }));
+
+    groupedDone.forEach((group) => {
+      const header: DisplayRow = { type: "group", group };
+      const collapsed = collapsedKeys.has(group.key);
+      // Не оставляем заголовок раскрытой группы одиноко последней строкой страницы.
+      if (!collapsed && group.items.length > 0 && current.length >= rowsPerPage - 1) flush();
+      pushRow(header);
+      if (collapsed) return;
+
+      group.items.forEach((operation, index) => {
+        // Если группа продолжается на следующей странице, повторяем её заголовок,
+        // а не переносим весь блок целиком на новую страницу.
+        if (current.length >= rowsPerPage) {
+          flush();
+          current.push(header);
+        }
+        current.push({ type: "op", op: operation });
+        if (index < group.items.length - 1 && current.length >= rowsPerPage) {
+          flush();
+          current.push(header);
+        }
+      });
     });
-    if (current.length || pages.length === 0) pages.push(current);
+
+    flush();
+    if (pages.length === 0) pages.push([]);
     return pages;
   }, [opRows, groupedDone, collapsedGroups, viewMonth]);
 

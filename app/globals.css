@@ -2996,3 +2996,56 @@ select {
     grid-column: 1 / -1;
   }
 }
+
+/* Kazakhstan diary: compact rows so more entries fit on one page */
+.workspace .editableOperationRow {
+  min-height: 31px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+  gap: 4px;
+}
+
+.workspace .operationInlineControl {
+  height: 25px;
+  padding-top: 0;
+  padding-bottom: 0;
+  font-size: 10px;
+}
+
+.workspace .operationFixedType {
+  height: 25px;
+  font-size: 9px;
+}
+
+.workspace .operationCommentEditor .statusBadge,
+.workspace .operationCommentEditor em {
+  height: 16px;
+  padding: 0 4px;
+  font-size: 7px;
+}
+
+.workspace .opgroup {
+  min-height: 32px;
+  margin: 2px 6px;
+  padding: 4px 9px;
+  border-radius: 10px;
+}
+
+.workspace .groupToggle {
+  width: 22px;
+  height: 22px;
+}
+
+.workspace .groupTitle {
+  font-size: 12px;
+}
+
+.workspace .groupMeta {
+  font-size: 10px;
+}
+
+.workspace .editableOperationRow .movebtn,
+.workspace .editableOperationRow .delete {
+  width: 23px;
+  height: 23px;
+}

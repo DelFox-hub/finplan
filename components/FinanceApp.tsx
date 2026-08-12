@@ -89,11 +89,19 @@ type CollapsedGroup = {
   collapsed: boolean;
 };
 
-type VirtualOperation = Operation & {
+type VirtualPaymentOperation = Operation & {
   virtual: true;
+  virtual_kind: "payment";
   payment: RecurringPayment;
 };
 
+type VirtualIncomeOperation = Operation & {
+  virtual: true;
+  virtual_kind: "income";
+  income: RecurringIncome;
+};
+
+type VirtualOperation = VirtualPaymentOperation | VirtualIncomeOperation;
 type AnyOperation = Operation | VirtualOperation;
 
 const supabase = createClient();
@@ -935,30 +943,59 @@ export default function FinanceApp({ userId }: { userId: string }) {
   }
 
   function plannedChecklistItems(month = viewMonth): VirtualOperation[] {
-    return duePayments(month)
-      .map((p) => ({
-        id: `virtual:${p.id}:${month}`,
+    const materializedIncomeIds = new Set(
+      monthOps(month)
+        .filter((operation) => operation.source_recurring_income_id)
+        .map((operation) => operation.source_recurring_income_id as string)
+    );
+
+    const paymentRows: VirtualPaymentOperation[] = duePayments(month).map((p) => ({
+      id: `virtual:payment:${p.id}:${month}`,
+      user_id: userId,
+      op_date: dateForDay(month, p.due_day),
+      kind: "expense" as Kind,
+      category_id: p.category_id,
+      title: p.title,
+      amount: Number(p.amount || 0),
+      completed: !isPaymentExcluded(p.id, month),
+      sort_order: Number(p.sort_order || 0),
+      source_recurring_payment_id: p.id,
+      source_recurring_income_id: null,
+      source_month: month,
+      virtual: true as const,
+      virtual_kind: "payment" as const,
+      payment: p
+    }));
+
+    const incomeRows: VirtualIncomeOperation[] = dueIncomes(month)
+      .filter((income) => !materializedIncomeIds.has(income.id))
+      .map((income) => ({
+        id: `virtual:income:${income.id}:${month}`,
         user_id: userId,
-        op_date: dateForDay(month, p.due_day),
-        kind: "expense" as Kind,
-        category_id: p.category_id,
-        title: p.title,
-        amount: Number(p.amount || 0),
-        completed: !isPaymentExcluded(p.id, month),
-        sort_order: Number(p.sort_order || 0),
-        source_recurring_payment_id: p.id,
-        source_recurring_income_id: null,
+        op_date: dateForDay(month, income.due_day),
+        kind: "income" as Kind,
+        category_id: income.category_id,
+        title: income.title,
+        amount: Number(income.amount || 0),
+        completed: false,
+        sort_order: Number(income.sort_order || 0),
+        source_recurring_payment_id: null,
+        source_recurring_income_id: income.id,
         source_month: month,
         virtual: true as const,
-        payment: p
-      }))
-      .sort((a, b) => String(a.op_date).localeCompare(String(b.op_date)));
+        virtual_kind: "income" as const,
+        income
+      }));
+
+    return [...paymentRows, ...incomeRows]
+      .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0) || String(a.op_date).localeCompare(String(b.op_date)));
   }
 
   function checklistOps(month = viewMonth): AnyOperation[] {
     // Платежи из настроек всегда строятся из актуальных настроек как виртуальные строки.
-    // Старые материализованные копии скрываются, чтобы не было дублей и устаревших сумм.
-    const real = monthOps(month).filter((o) => !o.source_recurring_payment_id && !o.source_recurring_income_id);
+    // Старые материализованные копии платежей скрываются, чтобы не было дублей.
+    // Материализованные регулярные доходы, наоборот, остаются видимыми как обычные операции.
+    const real = monthOps(month).filter((o) => !o.source_recurring_payment_id);
     const virtual = plannedChecklistItems(month);
     const all: AnyOperation[] = [...real, ...virtual];
     return all.sort((a, b) => {
@@ -997,6 +1034,41 @@ export default function FinanceApp({ userId }: { userId: string }) {
       if (prev.some((e) => e.recurring_payment_id === row.recurring_payment_id && e.month === row.month)) return prev;
       return [...prev, row];
     });
+  }
+
+  async function toggleVirtualIncome(item: VirtualIncomeOperation, checked: boolean) {
+    if (!checked) return;
+
+    const sourceMonth = item.source_month || viewMonth;
+    const existing = operations.find((operation) =>
+      operation.source_recurring_income_id === item.income.id && inMonth(operation.op_date, sourceMonth)
+    );
+
+    if (existing) {
+      if (!existing.completed) await toggleOperation(existing, true);
+      return;
+    }
+
+    const row = {
+      user_id: userId,
+      op_date: item.op_date,
+      kind: "income" as Kind,
+      category_id: item.income.category_id,
+      title: item.income.title,
+      amount: Math.max(Number(item.income.amount || 0), 0),
+      completed: true,
+      sort_order: Number(item.income.sort_order || nextSortOrder(monthOps(sourceMonth))),
+      source_recurring_payment_id: null,
+      source_recurring_income_id: item.income.id,
+      source_month: sourceMonth
+    };
+
+    const { data, error } = await supabase.from("operations").insert(row).select("*").single();
+    if (error) {
+      flash(error.message);
+      return;
+    }
+    setOperations((previous) => [...previous, { ...data, amount: Number(data.amount || 0) }]);
   }
 
   async function toggleOperation(op: Operation, completed: boolean) {
@@ -2059,7 +2131,8 @@ export default function FinanceApp({ userId }: { userId: string }) {
 
                   const op = row.op;
                   const real = !("virtual" in op);
-                  const virtualPayment = "virtual" in op ? op.payment : null;
+                  const virtualPayment = "virtual" in op && op.virtual_kind === "payment" ? op.payment : null;
+                  const virtualIncome = "virtual" in op && op.virtual_kind === "income" ? op.income : null;
                   const categories = op.kind === "income" ? incomeCategories : expenseCategories;
                   return (
                     <div className={`oprow editableOperationRow ${op.kind} ${op.completed ? "done" : "pending"} ${"virtual" in op ? "virtual" : ""}`} key={`${op.id}-${idx}`}>
@@ -2068,8 +2141,10 @@ export default function FinanceApp({ userId }: { userId: string }) {
                           type="checkbox"
                           checked={op.completed}
                           onChange={(e) => {
-                            if ("virtual" in op) toggleVirtualPayment(op, e.target.checked);
-                            else toggleOperation(op, e.target.checked);
+                            if ("virtual" in op) {
+                              if (op.virtual_kind === "payment") toggleVirtualPayment(op, e.target.checked);
+                              else toggleVirtualIncome(op, e.target.checked);
+                            } else toggleOperation(op, e.target.checked);
                           }}
                         />
                         <span />
@@ -2088,8 +2163,10 @@ export default function FinanceApp({ userId }: { userId: string }) {
                           type="date"
                           className="operationInlineControl operationDateInput"
                           value={op.op_date}
-                          aria-label="Дата регулярного платежа"
-                          onChange={(event) => updatePayment(virtualPayment!.id, { due_day: Number(event.target.value.slice(8, 10) || 1) })}
+                          aria-label={virtualPayment ? "Дата регулярного платежа" : "Дата регулярного дохода"}
+                          onChange={(event) => virtualPayment
+                            ? updatePayment(virtualPayment.id, { due_day: Number(event.target.value.slice(8, 10) || 1) })
+                            : updateIncome(virtualIncome!.id, { due_day: Number(event.target.value.slice(8, 10) || 1) })}
                         />
                       )}
 
@@ -2108,7 +2185,7 @@ export default function FinanceApp({ userId }: { userId: string }) {
                           <option value="income">Доход</option>
                         </select>
                       ) : (
-                        <span className="tag expense operationFixedType">Расход</span>
+                        <span className={`tag ${op.kind} operationFixedType`}>{op.kind === "income" ? "Доход" : "Расход"}</span>
                       )}
 
                       <select
@@ -2117,7 +2194,9 @@ export default function FinanceApp({ userId }: { userId: string }) {
                         aria-label="Статья операции"
                         onChange={(event) => real
                           ? updateOperationInline(op.id, { category_id: event.target.value || null })
-                          : updatePayment(virtualPayment!.id, { category_id: event.target.value || null })}
+                          : virtualPayment
+                            ? updatePayment(virtualPayment.id, { category_id: event.target.value || null })
+                            : updateIncome(virtualIncome!.id, { category_id: event.target.value || null })}
                       >
                         {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
                       </select>
@@ -2129,10 +2208,12 @@ export default function FinanceApp({ userId }: { userId: string }) {
                           aria-label="Комментарий операции"
                           onChange={(event) => real
                             ? updateOperationInline(op.id, { title: event.target.value })
-                            : updatePayment(virtualPayment!.id, { title: event.target.value })}
+                            : virtualPayment
+                              ? updatePayment(virtualPayment.id, { title: event.target.value })
+                              : updateIncome(virtualIncome!.id, { title: event.target.value })}
                         />
                         <b className={`statusBadge ${op.completed ? "fact" : "plan"}`}>{op.completed ? "факт" : "план"}</b>
-                        <em>{real ? "ручн." : "рег. платёж"}</em>
+                        <em>{real ? (op.source_recurring_income_id ? "рег. доход" : "ручн.") : virtualPayment ? "рег. платёж" : "рег. доход"}</em>
                       </div>
 
                       <input
@@ -2144,7 +2225,9 @@ export default function FinanceApp({ userId }: { userId: string }) {
                         aria-label="Сумма операции"
                         onChange={(event) => real
                           ? updateOperationInline(op.id, { amount: Math.max(Number(event.target.value || 0), 0) })
-                          : updatePayment(virtualPayment!.id, { amount: Math.max(Number(event.target.value || 0), 0) })}
+                          : virtualPayment
+                            ? updatePayment(virtualPayment.id, { amount: Math.max(Number(event.target.value || 0), 0) })
+                            : updateIncome(virtualIncome!.id, { amount: Math.max(Number(event.target.value || 0), 0) })}
                       />
 
                       <div className="rowactions">

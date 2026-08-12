@@ -944,8 +944,9 @@ export default function FinanceApp({ userId }: { userId: string }) {
 
   function plannedChecklistItems(month = viewMonth): VirtualOperation[] {
     const materializedIncomeIds = new Set(
-      monthOps(month)
+      operations
         .filter((operation) => operation.source_recurring_income_id)
+        .filter((operation) => (operation.source_month || operation.op_date.slice(0, 7)) === month)
         .map((operation) => operation.source_recurring_income_id as string)
     );
 
@@ -1006,7 +1007,7 @@ export default function FinanceApp({ userId }: { userId: string }) {
     });
   }
 
-  async function toggleVirtualPayment(item: VirtualOperation, checked: boolean) {
+  async function toggleVirtualPayment(item: VirtualPaymentOperation, checked: boolean) {
     const sourceMonth = item.source_month || viewMonth;
 
     if (checked) {
@@ -1041,7 +1042,8 @@ export default function FinanceApp({ userId }: { userId: string }) {
 
     const sourceMonth = item.source_month || viewMonth;
     const existing = operations.find((operation) =>
-      operation.source_recurring_income_id === item.income.id && inMonth(operation.op_date, sourceMonth)
+      operation.source_recurring_income_id === item.income.id
+      && (operation.source_month || operation.op_date.slice(0, 7)) === sourceMonth
     );
 
     if (existing) {
@@ -1072,6 +1074,21 @@ export default function FinanceApp({ userId }: { userId: string }) {
   }
 
   async function toggleOperation(op: Operation, completed: boolean) {
+    // A recurring income is materialized only when it becomes a fact. Returning it
+    // to plan removes that month-specific fact so the virtual planned row can reappear
+    // from the current recurring-income settings without stale overrides.
+    if (!completed && op.source_recurring_income_id) {
+      await cancelQueuedSave(`operation:${op.id}`);
+      delete pendingOperationPatchesRef.current[op.id];
+      const { error } = await supabase.from("operations").delete().eq("user_id", userId).eq("id", op.id);
+      if (error) {
+        flash(error.message);
+        return;
+      }
+      setOperations((prev) => prev.filter((x) => x.id !== op.id));
+      return;
+    }
+
     const patch = { completed };
     const { error } = await supabase.from("operations").update(patch).eq("user_id", userId).eq("id", op.id);
     if (error) {
@@ -1196,7 +1213,12 @@ export default function FinanceApp({ userId }: { userId: string }) {
     const allOps = operations.filter((o) => inMonth(o.op_date, month));
     const doneOps = allOps.filter((o) => o.completed);
 
-    const doneIncomeSource = new Set(doneOps.filter((o) => o.source_recurring_income_id).map((o) => o.source_recurring_income_id));
+    const doneIncomeSource = new Set(
+      operations
+        .filter((operation) => operation.completed && operation.source_recurring_income_id)
+        .filter((operation) => (operation.source_month || operation.op_date.slice(0, 7)) === month)
+        .map((operation) => operation.source_recurring_income_id)
+    );
 
     dueIncomes(month).forEach((i) => {
       if (doneIncomeSource.has(i.id)) return;

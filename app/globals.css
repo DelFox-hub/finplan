@@ -360,7 +360,7 @@ select {
 
 .workspace {
   display: grid;
-  grid-template-columns: minmax(720px, 50%) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 10px;
   min-height: 680px;
 }
@@ -584,20 +584,7 @@ select {
   background: var(--red-soft);
 }
 
-.commentCell {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.commentCell span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.statusBadge,
-.commentCell em {
+.statusBadge {
   display: inline-grid;
   place-items: center;
   height: 19px;
@@ -622,12 +609,6 @@ select {
   border: 1px solid #e2e8f0;
 }
 
-.commentCell em {
-  color: #64748b;
-  background: #fff;
-  border: 1px solid #edf2f7;
-}
-
 .amount {
   text-align: right;
   font-weight: 700;
@@ -648,7 +629,6 @@ select {
 }
 
 .movebtn,
-.edit,
 .delete,
 .mini {
   width: 26px;
@@ -1735,10 +1715,6 @@ select {
     display: none;
   }
 
-  .commentCell em {
-    display: none;
-  }
-
   .matrix .corner,
   .matrix .rowhead,
   .matrix .year,
@@ -1824,17 +1800,16 @@ select {
 .relocationPanel {
   min-width: 0;
   display: grid;
-  gap: 12px;
-  padding: clamp(12px, 1.4vw, 18px);
-  border: 1px solid var(--line);
-  border-radius: 22px;
-  background: rgba(255, 255, 255, .94);
-  box-shadow: var(--shadow);
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .relocationHead,
-.sourcesHead,
-.cardTitleRow {
+.sourcesHead {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -1849,8 +1824,7 @@ select {
 }
 
 .relocationHead h2,
-.sourcesHead h3,
-.cardTitleRow h3 {
+.sourcesHead h3 {
   margin: 0;
 }
 
@@ -1859,8 +1833,7 @@ select {
 }
 
 .relocationHead p,
-.sourcesHead p,
-.cardTitleRow p {
+.sourcesHead p {
   margin: 4px 0 0;
   color: var(--muted);
   font-size: 12px;
@@ -2059,55 +2032,6 @@ select {
   box-shadow: 0 8px 22px rgba(15, 23, 42, .04);
 }
 
-.salaryGrid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.checkLine {
-  grid-template-columns: 18px auto;
-  align-items: center;
-  align-content: center;
-  justify-content: start;
-}
-
-.checkLine input {
-  width: 16px;
-  height: 16px;
-}
-
-.salaryResults {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.salaryResults > div {
-  min-width: 0;
-  display: grid;
-  gap: 3px;
-  padding: 9px;
-  border: 1px solid #e8edf5;
-  border-radius: 12px;
-  background: #f8fafc;
-}
-
-.salaryResults span,
-.smallWarn {
-  color: var(--muted);
-  font-size: 10px;
-}
-
-.salaryResults b {
-  font-size: 15px;
-}
-
-.smallWarn {
-  margin: 0;
-  line-height: 1.4;
-}
-
 .plannerDiarySection {
   padding: 0;
   overflow: hidden;
@@ -2287,35 +2211,10 @@ select {
   color: #fff;
 }
 
-.germanyForecastBox {
-  width: 100%;
-  min-height: 290px;
-  overflow: auto;
-  scrollbar-gutter: stable;
-}
-
 .germanyForecastBox .matrix {
   width: max-content;
   min-width: 100%;
   table-layout: fixed;
-}
-
-.germanyForecastBox .matrix th:not(.corner):not(.rowhead),
-.germanyForecastBox .matrix td {
-  min-width: 72px;
-  max-width: 72px;
-  width: 72px;
-  padding: 0 5px;
-  white-space: nowrap;
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-}
-
-.germanyForecastBox .matrix .corner,
-.germanyForecastBox .matrix .rowhead {
-  min-width: 180px;
-  max-width: 180px;
-  width: 180px;
 }
 
 .forecastGroupToggle {
@@ -2439,8 +2338,7 @@ select {
 
 @media (max-width: 980px) {
   .relocationHead,
-  .sourcesHead,
-  .cardTitleRow {
+  .sourcesHead {
     flex-direction: column;
     align-items: stretch;
   }
@@ -2495,9 +2393,7 @@ select {
   }
 
   .scenarioBar,
-  .plannerKpis,
-  .salaryGrid,
-  .salaryResults {
+  .plannerKpis {
     grid-template-columns: 1fr;
   }
 
@@ -2545,15 +2441,6 @@ select {
 }
 
 /* Germany workspace structure. Geometry and typography are unified below with Kazakhstan. */
-.relocationPanel {
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  gap: 10px;
-}
-
 .germanyExpensePanel,
 .germanyForecastPanel {
   width: 100%;
@@ -2630,7 +2517,9 @@ select {
 .germanyExpenseBody {
   min-height: 0;
   max-height: none !important;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
 }
 
 .kzLikeGroupWrap {
@@ -2664,10 +2553,12 @@ select {
 }
 
 .germanyForecastBox {
+  width: 100%;
   min-height: 0;
   height: auto;
   max-height: none;
   overflow: auto;
+  scrollbar-gutter: stable;
 }
 
 .germanyForecastBox .matrix th:not(.corner):not(.rowhead),
@@ -2676,7 +2567,9 @@ select {
   max-width: 72px;
   width: 72px;
   padding: 0 6px;
+  white-space: nowrap;
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
 .germanyForecastBox .matrix .corner,
@@ -2725,20 +2618,6 @@ select {
 }
 
 /* Unified Kazakhstan/Germany diary presentation and inline editing */
-.workspace,
-.germanyDashboard {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 10px;
-  min-height: 680px;
-}
-
-@media (min-width: 1280px) {
-  .workspace,
-  .germanyDashboard {
-    grid-template-columns: minmax(680px, 0.98fr) minmax(0, 1.22fr);
-  }
-}
-
 .workspace .panel,
 .germanyDashboard .panel {
   font-family: "Segoe UI Variable Text", "Segoe UI", Arial, sans-serif;
@@ -2899,7 +2778,6 @@ select {
   min-width: 0;
 }
 
-.germanyExpenseBody,
 .workspace .tbody {
   overflow-y: auto;
   overflow-x: hidden;
@@ -2907,8 +2785,7 @@ select {
 }
 
 @media (max-width: 980px) {
-  .workspace,
-  .germanyDashboard {
+  .workspace {
     grid-template-columns: 1fr;
     min-height: 0;
   }
@@ -2979,20 +2856,6 @@ select {
   width: 100%;
   height: 100%;
   align-self: stretch;
-}
-
-/* Explicitly cancel every generic workspace stacking rule for Germany. */
-@media (max-width: 980px) {
-  .germanyDashboard {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
-    min-height: 680px !important;
-  }
-}
-
-@media (max-width: 760px) {
-  .germanyDashboard {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
-  }
 }
 
 /* Germany expense row integrity: keep every editor on one physical row */

@@ -1137,7 +1137,7 @@ export default function MigrationPlanner({
           <div className="sourcesHead">
             <div>
               <h3>Германия и прочие сценарные статьи</h3>
-              <p>Здесь остаются доходы и разовые сценарные расходы. Регулярные расходы Германии настраиваются в разделе «Германия».</p>
+              <p>Здесь остаются доходы и разовые сценарные расходы. Регулярные расходы Германии редактируются в блоке расходов ниже или в «Настройки → Германия».</p>
             </div>
             <div>
               <button type="button" className="btn blue" onClick={() => { addRow("income"); setShowScenarioArticles(true); }}>+ доход</button>
@@ -1318,7 +1318,7 @@ export default function MigrationPlanner({
           </div>
         )}
 
-        <div className="germanyDashboard workspace">
+        <div className="germanyDashboard">
           <section className="panel diaryPanel germanyExpensePanel">
             <div className="panel-head">
               <div>

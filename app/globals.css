@@ -3061,3 +3061,11 @@ select {
 .loginLink:hover {
   text-decoration: underline;
 }
+
+.loginLinkButton {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}

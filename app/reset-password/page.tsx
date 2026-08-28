@@ -1,7 +1,5 @@
-import ResetPasswordForm from "./reset-password-form";
-
-export const dynamic = "force-dynamic";
+import { redirect } from "next/navigation";
 
 export default function ResetPasswordPage() {
-  return <ResetPasswordForm />;
+  redirect("/login?mode=recovery");
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 
 export default function ResetPasswordForm() {
@@ -8,12 +9,40 @@ export default function ResetPasswordForm() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
+  const [hasSession, setHasSession] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function checkSession() {
+      const supabase = createClient();
+      const { data, error } = await supabase.auth.getSession();
+      if (cancelled) return;
+
+      setCheckingSession(false);
+      setHasSession(Boolean(data.session) && !error);
+      if (error || !data.session) {
+        setMessage("Сессия восстановления не найдена. Запроси новую ссылку на email.");
+      }
+    }
+
+    void checkSession();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (submitting) return;
+    if (submitting || !hasSession) return;
 
     setMessage("");
+
+    if (password.length < 6) {
+      setMessage("Пароль должен содержать не меньше 6 символов.");
+      return;
+    }
 
     if (password !== confirmPassword) {
       setMessage("Пароли не совпадают.");
@@ -27,12 +56,14 @@ export default function ResetPasswordForm() {
       const { error } = await supabase.auth.updateUser({ password });
 
       if (error) {
-        setMessage("Не удалось изменить пароль. Проверь требования к паролю или запроси новую ссылку.");
+        console.error("Supabase password update error:", error);
+        setMessage(`Не удалось изменить пароль: ${error.message}`);
         return;
       }
 
       window.location.replace("/app");
-    } catch {
+    } catch (err) {
+      console.error("Password update failed:", err);
       setMessage("Не удалось изменить пароль. Проверь подключение и попробуй ещё раз.");
     } finally {
       setSubmitting(false);
@@ -55,7 +86,9 @@ export default function ResetPasswordForm() {
             onChange={(e) => setPassword(e.target.value)}
             type="password"
             autoComplete="new-password"
+            minLength={6}
             required
+            disabled={checkingSession || !hasSession}
           />
         </label>
 
@@ -68,13 +101,21 @@ export default function ResetPasswordForm() {
             onChange={(e) => setConfirmPassword(e.target.value)}
             type="password"
             autoComplete="new-password"
+            minLength={6}
             required
+            disabled={checkingSession || !hasSession}
           />
         </label>
 
-        <button className="primaryBtn" type="submit" disabled={submitting}>
-          {submitting ? "Сохранение..." : "Сохранить пароль"}
+        <button className="primaryBtn" type="submit" disabled={checkingSession || !hasSession || submitting}>
+          {checkingSession ? "Проверка ссылки..." : submitting ? "Сохранение..." : "Сохранить пароль"}
         </button>
+
+        {!checkingSession && !hasSession && (
+          <Link className="loginLink" href="/forgot-password">
+            Запросить новую ссылку
+          </Link>
+        )}
 
         {message && <div className="loginMessage">{message}</div>}
       </form>

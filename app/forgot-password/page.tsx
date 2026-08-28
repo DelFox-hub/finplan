@@ -36,14 +36,29 @@ export default function ForgotPasswordPage() {
       const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, { redirectTo });
 
       if (error) {
-        setMessage("Не удалось отправить письмо. Попробуй ещё раз позже.");
+        console.error("Supabase password recovery error:", {
+          message: error.message,
+          status: error.status,
+          code: error.code,
+        });
+        const details = [
+          error.message,
+          error.code ? `code: ${error.code}` : "",
+          error.status ? `status: ${error.status}` : "",
+        ].filter(Boolean).join(" · ");
+        setMessage(`Supabase: ${details}`);
         return;
       }
 
       setSent(true);
       setMessage("Если этот email привязан к дневнику, ссылка для смены пароля отправлена на него.");
-    } catch {
-      setMessage("Не удалось отправить письмо. Проверь подключение и попробуй ещё раз.");
+    } catch (err) {
+      console.error("Password recovery request failed:", err);
+      setMessage(
+        err instanceof Error
+          ? `Ошибка запроса: ${err.message}`
+          : "Не удалось отправить письмо из-за неизвестной ошибки."
+      );
     } finally {
       setSubmitting(false);
     }

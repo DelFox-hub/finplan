@@ -3049,3 +3049,15 @@ select {
   width: 23px;
   height: 23px;
 }
+
+.loginLink {
+  justify-self: center;
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.loginLink:hover {
+  text-decoration: underline;
+}

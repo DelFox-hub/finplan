@@ -30,6 +30,10 @@ function monthFromIndex(index: number) {
   return `${year}-${String((index % 12) + 1).padStart(2, "0")}`;
 }
 
+function laterMonth(left: string, right: string) {
+  return monthIndex(left) >= monthIndex(right) ? left : right;
+}
+
 export function getCreditRemainingMonths(payment: CreditScheduleInput) {
   const total = Math.max(Number(payment.total_months || 0), 0);
   const paid = Math.min(Math.max(Number(payment.paid_months || 0), 0), total);
@@ -46,7 +50,11 @@ export function getCreditEarlyPayoffInfo(payment: CreditScheduleInput, calcStart
   const totalInstallments = Math.max(Number(payment.total_months || 0), 0);
   const paidBeforeStart = Math.min(Math.max(Number(payment.paid_months || 0), 0), totalInstallments);
   const remainingAtStart = getCreditRemainingMonths(payment);
-  const firstUnpaidMonthIndex = monthIndex(startMonth) + paidBeforeStart;
+  // `paid_months` describes the part already closed when the financial plan
+  // begins. It reduces the remaining term; it must not be added once again to
+  // the calendar start, or existing loans disappear for paid_months months.
+  const firstUnpaidMonth = laterMonth(startMonth, calcStart);
+  const firstUnpaidMonthIndex = monthIndex(firstUnpaidMonth);
   const monthsBeforePayoff = monthIndex(payoffMonth) - firstUnpaidMonthIndex;
   if (remainingAtStart <= 0 || monthsBeforePayoff < 0 || monthsBeforePayoff >= remainingAtStart) return null;
 
@@ -61,18 +69,20 @@ export function getCreditEarlyPayoffInfo(payment: CreditScheduleInput, calcStart
     paidInstallments,
     paidAmount: paidInstallments * monthlyAmount,
     payoffAmount: installmentsAtPayoff * monthlyAmount,
-    firstUnpaidMonth: monthFromIndex(firstUnpaidMonthIndex),
-    originalEndMonth: monthFromIndex(monthIndex(startMonth) + totalInstallments - 1)
+    firstUnpaidMonth,
+    originalEndMonth: monthFromIndex(firstUnpaidMonthIndex + remainingAtStart - 1)
   };
 }
 
 export function creditRegularPaymentApplies(payment: CreditScheduleInput, month: string, calcStart: string) {
   if (payment.payment_type !== "credit") return false;
   const startMonth = normalizeMonth(payment.valid_from_month) || calcStart;
-  const offset = monthIndex(month) - monthIndex(startMonth);
+  const firstUnpaidMonth = laterMonth(startMonth, calcStart);
+  const offset = monthIndex(month) - monthIndex(firstUnpaidMonth);
   const total = Math.max(Number(payment.total_months || 0), 0);
   const paid = Math.min(Math.max(Number(payment.paid_months || 0), 0), total);
-  if (offset < paid || offset >= total) return false;
+  const remaining = Math.max(total - paid, 0);
+  if (offset < 0 || offset >= remaining) return false;
   const payoff = getCreditEarlyPayoffInfo(payment, calcStart);
   return !payoff || monthIndex(month) < monthIndex(payoff.month);
 }

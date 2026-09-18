@@ -2603,8 +2603,8 @@ export default function FinanceApp({ userId }: { userId: string }) {
                               const payoff = getCreditEarlyPayoffInfo(p, calcStart);
                               const startMonth = normalizeMonth(p.valid_from_month) || calcStart;
                               const paidInstallments = Math.min(Math.max(Number(p.paid_months || 0), 0), Number(p.total_months || 0));
-                              const firstUnpaidMonth = addMonths(startMonth, paidInstallments);
-                              const originalEndMonth = addMonths(startMonth, Math.max(Number(p.total_months || 0) - 1, 0));
+                              const firstUnpaidMonth = monthIndex(startMonth) > monthIndex(calcStart) ? startMonth : calcStart;
+                              const originalEndMonth = addMonths(firstUnpaidMonth, Math.max(Number(p.total_months || 0) - paidInstallments - 1, 0));
                               const paidAmount = payoff?.paidAmount ?? Math.min(Number(p.paid_months || 0), Number(p.total_months || 0)) * Number(p.amount || 0);
                               const payoffAmount = payoff?.payoffAmount ?? getCreditRemainingMonths(p) * Number(p.amount || 0);
                               return <tr key={p.id} className={p.active ? "" : "inactive"}>

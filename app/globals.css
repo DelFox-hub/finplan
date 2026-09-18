@@ -827,7 +827,8 @@ select {
   font-weight: 600;
 }
 
-/* Keep the original row colors, but make the current month column unmistakable. */
+/* Current calendar month: keep the row palette, but make the whole month
+   column unmistakable with a stronger tint and a continuous outline. */
 .matrix .forecastCurrentMonth {
   background-image: linear-gradient(rgba(54, 93, 147, .10), rgba(54, 93, 147, .10));
   box-shadow: inset 2px 0 0 #365d93, inset -2px 0 0 #365d93;

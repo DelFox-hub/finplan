@@ -1050,9 +1050,9 @@ export default function FinanceApp({ userId }: { userId: string }) {
   }
 
   function checklistOps(month = viewMonth): AnyOperation[] {
-    // The diary is for manually entered rows only. Recurring incomes, regular
-    // payments and credits stay in settings and still participate in every
-    // calculation through oneMonthPlan; they are simply not duplicated here.
+    // Diary display is intentionally manual-only. Rows generated from recurring
+    // income/payment settings stay out of the diary UI, but remain untouched in
+    // the data model and forecast calculations.
     return monthOps(month)
       .filter((operation) => !operation.source_recurring_payment_id && !operation.source_recurring_income_id)
       .sort((a, b) => {
@@ -2052,49 +2052,21 @@ export default function FinanceApp({ userId }: { userId: string }) {
     return [...rows].sort((left, right) => compareSettingsValues(value(left), value(right)) * (sort.direction === "asc" ? 1 : -1));
   }, [incomeCategories, settingsTableFilters.incomeCategories, settingsTableSorts.incomeCategories]);
 
-  const manualForecastRows = useMemo(() => {
-    const visibleMonths = new Set(forecast.map((item) => item.month));
-    const rows = new Map<string, {
-      id: string;
-      kind: Kind;
-      label: string;
-      sortOrder: number;
-      amountsByMonth: Record<string, number>;
-    }>();
+  const incomeRowNames = useMemo(() => {
+    // Forecast rows are categories, not individual operations. Keep every
+    // configured category visible even when its value is zero in the selected
+    // horizon, and append any calculation-only fallback buckets if they appear.
+    const names = new Set(incomeCategories.map((category) => category.name));
+    forecast.forEach((item) => Object.keys(item.incomeBy).forEach((name) => names.add(name)));
+    return [...names];
+  }, [forecast, incomeCategories]);
 
-    operations
-      .filter((operation) => !operation.source_recurring_payment_id && !operation.source_recurring_income_id)
-      .filter((operation) => visibleMonths.has(operation.op_date.slice(0, 7)))
-      .forEach((operation) => {
-        const month = operation.op_date.slice(0, 7);
-        const categories = operation.kind === "income" ? incomeCategories : expenseCategories;
-        const fallback = operation.kind === "income" ? "Доход" : "Другое";
-        const category = categories.find((item) => item.id === operation.category_id);
-        const label = category?.name || fallback;
-        const rowId = `${operation.kind}:${operation.category_id || `fallback:${label}`}`;
-        const existing = rows.get(rowId);
-        const amount = Number(operation.amount || 0);
+  const expenseRowNames = useMemo(() => {
+    const names = new Set(expenseCategories.map((category) => category.name));
+    forecast.forEach((item) => Object.keys(item.expenseBy).forEach((name) => names.add(name)));
+    return [...names];
+  }, [forecast, expenseCategories]);
 
-        if (existing) {
-          existing.amountsByMonth[month] = Number(existing.amountsByMonth[month] || 0) + amount;
-          existing.sortOrder = Math.min(existing.sortOrder, Number(category?.sort_order ?? operation.sort_order ?? 0));
-          return;
-        }
-
-        rows.set(rowId, {
-          id: rowId,
-          kind: operation.kind,
-          label,
-          sortOrder: Number(category?.sort_order ?? operation.sort_order ?? 0),
-          amountsByMonth: { [month]: amount }
-        });
-      });
-
-    return [...rows.values()].sort((left, right) => left.sortOrder - right.sortOrder || left.label.localeCompare(right.label, "ru"));
-  }, [forecast, operations, incomeCategories, expenseCategories]);
-
-  const manualIncomeForecastRows = manualForecastRows.filter((row) => row.kind === "income");
-  const manualExpenseForecastRows = manualForecastRows.filter((row) => row.kind === "expense");
   const currentForecastMonth = currentMonth();
   const forecastCellClass = (month: string, base = "") => `${base} ${month === currentForecastMonth ? "forecastCurrentMonth" : ""}`.trim();
 
@@ -2372,7 +2344,7 @@ export default function FinanceApp({ userId }: { userId: string }) {
               </div>
               <label className="forecastStartControl">
                 <span>Показывать с</span>
-                <MonthPicker value={forecastStart} onChange={(value) => updateSettings({ forecast_start_month: value || currentMonth() })} />
+                <MonthPicker value={forecastStart} min={calcStart} onChange={(value) => updateSettings({ forecast_start_month: value || currentMonth() })} />
               </label>
             </div>
 
@@ -2392,17 +2364,17 @@ export default function FinanceApp({ userId }: { userId: string }) {
                   <tr className="strong netRow"><th className="rowhead">Остаток месяца</th>{forecast.map((m) => <td className={forecastCellClass(m.month, m.net < 0 ? "neg" : "")} key={`net-${m.month}`}>{full(m.net)}</td>)}</tr>
                   <tr className="strong cumulativeRow"><th className="rowhead">Накопительно</th>{forecast.map((m) => <td className={forecastCellClass(m.month, m.balance < 0 ? "neg" : "")} key={`bal-${m.month}`}>{full(m.balance)}</td>)}</tr>
                   <tr className="section incomeSection"><th className="rowhead">Доходы</th>{forecast.map((m) => <td className={forecastCellClass(m.month)} key={`inc-${m.month}`}>{full(m.incomeTotal)}</td>)}</tr>
-                  {manualIncomeForecastRows.map((row) => (
-                    <tr className="incomeRow manualForecastRow" key={`manual-income-${row.id}`}>
-                      <th className="rowhead light">{row.label}</th>
-                      {forecast.map((m) => <td className={forecastCellClass(m.month)} key={`${row.id}-${m.month}`}>{full(row.amountsByMonth[m.month] || 0)}</td>)}
+                  {incomeRowNames.map((name) => (
+                    <tr className="incomeRow" key={`incrow-${name}`}>
+                      <th className="rowhead light">{name}</th>
+                      {forecast.map((m) => <td className={forecastCellClass(m.month)} key={`${name}-${m.month}`}>{full(m.incomeBy[name] || 0)}</td>)}
                     </tr>
                   ))}
                   <tr className="section expenseSection"><th className="rowhead">Расходы</th>{forecast.map((m) => <td className={forecastCellClass(m.month)} key={`exp-${m.month}`}>{full(m.expenseTotal)}</td>)}</tr>
-                  {manualExpenseForecastRows.map((row) => (
-                    <tr className="expenseRow manualForecastRow" key={`manual-expense-${row.id}`}>
-                      <th className="rowhead light">{row.label}</th>
-                      {forecast.map((m) => <td className={forecastCellClass(m.month)} key={`${row.id}-${m.month}`}>{full(row.amountsByMonth[m.month] || 0)}</td>)}
+                  {expenseRowNames.map((name) => (
+                    <tr className="expenseRow" key={`exprow-${name}`}>
+                      <th className="rowhead light">{name}</th>
+                      {forecast.map((m) => <td className={forecastCellClass(m.month)} key={`${name}-${m.month}`}>{full(m.expenseBy[name] || 0)}</td>)}
                     </tr>
                   ))}
                 </tbody>
@@ -2507,7 +2479,7 @@ export default function FinanceApp({ userId }: { userId: string }) {
                     </div>
                     <div className="settingsGrid settingsGridCards">
                       <label>Дневник операций — показывать с<MonthPicker value={diaryStart} onChange={(value) => updateSettings({ diary_start_month: value || currentMonth() })} /><span>Это нижняя граница переключения месяцев в дневнике.</span></label>
-                      <label>Календарный прогноз — показывать с<MonthPicker value={forecastStart} onChange={(value) => updateSettings({ forecast_start_month: value || currentMonth() })} /><span>Прогноз начинается с этого месяца и не зависит от дневника.</span></label>
+                      <label>Календарный прогноз — показывать с<MonthPicker value={forecastStart} min={calcStart} onChange={(value) => updateSettings({ forecast_start_month: value || currentMonth() })} /><span>Прогноз начинается с этого месяца и не зависит от дневника.</span></label>
                       <label>Стартовый остаток<input type="number" value={settings.start_balance} onChange={(e) => updateSettings({ start_balance: Number(e.target.value || 0) })} /></label>
                       <label>Резервный план дохода<input type="number" value={settings.plan_income} onChange={(e) => updateSettings({ plan_income: Number(e.target.value || 0) })} /><span>Используется только когда регулярные доходы не заведены.</span></label>
                       <label>Резервный план расходов<input type="number" value={settings.plan_other} onChange={(e) => updateSettings({ plan_other: Number(e.target.value || 0) })} /><span>Используется только когда регулярные расходы не заведены.</span></label>

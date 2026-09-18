@@ -70,6 +70,25 @@ describe("calculateMonthPlan", () => {
     expect(october.incomeTotal).toBe(120_000);
   });
 
+  it("counts a pending manual operation as part of the monthly plan", () => {
+    const result = calculateMonthPlan({
+      ...baseInput(),
+      operations: [{
+        op_date: "2026-09-18",
+        kind: "expense",
+        category_id: "home",
+        amount: 35_000,
+        completed: false,
+        source_recurring_payment_id: null,
+        source_recurring_income_id: null,
+        source_month: null
+      }]
+    });
+
+    expect(result.expenseTotal).toBe(35_000);
+    expect(result.net).toBe(-35_000);
+  });
+
   it("does not remove a fallback merely because a manual operation exists", () => {
     const result = calculateMonthPlan({
       ...baseInput(),

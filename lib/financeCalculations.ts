@@ -79,7 +79,7 @@ export function calculateMonthPlan(input: {
 
   const incomeBy = Object.fromEntries(incomeCategories.map((category) => [category.name, 0])) as Record<string, number>;
   const expenseBy = Object.fromEntries(expenseCategories.map((category) => [category.name, 0])) as Record<string, number>;
-  const completedInMonth = operations.filter((operation) => operation.completed && operation.op_date.slice(0, 7) === month);
+  const operationsInMonth = operations.filter((operation) => operation.op_date.slice(0, 7) === month);
   const completedRecurringIncomeSources = new Set(
     operations
       .filter((operation) => operation.completed && operation.source_recurring_income_id)
@@ -100,16 +100,21 @@ export function calculateMonthPlan(input: {
     expenseBy[name] = Number(expenseBy[name] || 0) + Number(payment.amount || 0);
   }
 
-  for (const operation of completedInMonth) {
+  for (const operation of operationsInMonth) {
+    // Manual rows are part of the monthly plan immediately, even before the
+    // checkbox is marked as fact. Materialized recurring rows keep their old
+    // semantics: only a completed recurring income replaces its planned copy,
+    // and old recurring-payment copies are never counted twice.
+    const isManual = !operation.source_recurring_payment_id && !operation.source_recurring_income_id;
+
     if (operation.kind === "income") {
+      if (!isManual && !operation.completed) continue;
       const name = categoryName(incomeCategories, operation.category_id, "Доход");
       incomeBy[name] = Number(incomeBy[name] || 0) + Number(operation.amount || 0);
       continue;
     }
 
-    // Regular payments are already represented by their current settings.
-    // Old materialized copies must never be counted for a second time.
-    if (!operation.source_recurring_payment_id) {
+    if (isManual) {
       const name = categoryName(expenseCategories, operation.category_id, "Другое");
       expenseBy[name] = Number(expenseBy[name] || 0) + Number(operation.amount || 0);
     }

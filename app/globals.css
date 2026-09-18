@@ -827,6 +827,28 @@ select {
   font-weight: 600;
 }
 
+/* Current calendar month: keep the row palette, but make the whole month
+   column unmistakable with a stronger tint and a continuous outline. */
+.matrix .forecastCurrentMonth {
+  background-image: linear-gradient(rgba(54, 93, 147, .10), rgba(54, 93, 147, .10));
+  box-shadow: inset 2px 0 0 #365d93, inset -2px 0 0 #365d93;
+  font-weight: 700;
+}
+
+.matrix thead tr:first-child .forecastCurrentMonth {
+  background-color: #dce9fb;
+  box-shadow: inset 2px 0 0 #365d93, inset -2px 0 0 #365d93, inset 0 2px 0 #365d93;
+}
+
+.matrix thead tr:nth-child(2) .forecastCurrentMonth {
+  background-color: #e8f1fd;
+  color: #244b7c;
+}
+
+.matrix tbody tr:last-child .forecastCurrentMonth {
+  box-shadow: inset 2px 0 0 #365d93, inset -2px 0 0 #365d93, inset 0 -2px 0 #365d93;
+}
+
 .settings-fab {
   position: fixed;
   left: 18px;

@@ -42,6 +42,14 @@ export default function MonthPicker({ value, onChange, min, max, nullable = fals
   useEffect(() => setExpandedYear(selectedYear), [selectedYear]);
   useEffect(() => {
     if (!open) return;
+    const frame = window.requestAnimationFrame(() => {
+      const target = rootRef.current?.querySelector<HTMLElement>(`[data-month-picker-year="${expandedYear}"]`);
+      target?.scrollIntoView({ block: "start" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [open, expandedYear]);
+  useEffect(() => {
+    if (!open) return;
     const close = (event: MouseEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
     };
@@ -73,7 +81,7 @@ export default function MonthPicker({ value, onChange, min, max, nullable = fals
           {nullable && <button type="button" className="monthPickerEmpty" onClick={() => { onChange(null); setOpen(false); }}>Без ограничения</button>}
           <div className="monthPickerYears">
             {years.map((year) => (
-              <div className="monthPickerYear" key={year}>
+              <div className="monthPickerYear" key={year} data-month-picker-year={year}>
                 <button type="button" className="monthPickerYearButton" onClick={() => setExpandedYear(year)}>{year}</button>
                 {expandedYear === year && (
                   <div className="monthPickerGrid">

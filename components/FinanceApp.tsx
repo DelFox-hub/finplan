@@ -2053,17 +2053,34 @@ export default function FinanceApp({ userId }: { userId: string }) {
     return [...rows].sort((left, right) => compareSettingsValues(value(left), value(right)) * (sort.direction === "asc" ? 1 : -1));
   }, [incomeCategories, settingsTableFilters.incomeCategories, settingsTableSorts.incomeCategories]);
 
-  const incomeRowNames = useMemo(() => {
-    const names = new Set<string>();
-    forecast.forEach((m) => Object.entries(m.incomeBy).forEach(([k, v]) => Number(v) !== 0 && names.add(k)));
-    return [...names];
-  }, [forecast]);
+  const manualForecastRows = useMemo(() => {
+    const visibleMonths = new Set(forecast.map((item) => item.month));
+    return operations
+      .filter((operation) => !operation.source_recurring_payment_id && !operation.source_recurring_income_id)
+      .filter((operation) => visibleMonths.has(operation.op_date.slice(0, 7)))
+      .map((operation) => {
+        const fallback = operation.kind === "income"
+          ? categoryName(incomeCategories, operation.category_id, "Доход")
+          : categoryName(expenseCategories, operation.category_id, "Другое");
+        const cleanTitle = operation.title.trim();
+        return {
+          id: operation.id,
+          kind: operation.kind,
+          month: operation.op_date.slice(0, 7),
+          opDate: operation.op_date,
+          sortOrder: Number(operation.sort_order || 0),
+          label: cleanTitle && cleanTitle !== "Операция" ? cleanTitle : fallback,
+          amount: Number(operation.amount || 0),
+          tooltip: `${operation.op_date} · ${fallback}`
+        };
+      })
+      .sort((left, right) => left.opDate.localeCompare(right.opDate) || left.sortOrder - right.sortOrder || left.label.localeCompare(right.label, "ru"));
+  }, [forecast, operations, incomeCategories, expenseCategories]);
 
-  const expenseRowNames = useMemo(() => {
-    const names = new Set<string>();
-    forecast.forEach((m) => Object.entries(m.expenseBy).forEach(([k, v]) => Number(v) !== 0 && names.add(k)));
-    return [...names];
-  }, [forecast]);
+  const manualIncomeForecastRows = manualForecastRows.filter((row) => row.kind === "income");
+  const manualExpenseForecastRows = manualForecastRows.filter((row) => row.kind === "expense");
+  const currentForecastMonth = currentMonth();
+  const forecastCellClass = (month: string, base = "") => `${base} ${month === currentForecastMonth ? "forecastCurrentMonth" : ""}`.trim();
 
   if (loading) {
     return <main className="loading">Загрузка дневника…</main>;
@@ -2339,7 +2356,7 @@ export default function FinanceApp({ userId }: { userId: string }) {
               </div>
               <label className="forecastStartControl">
                 <span>Показывать с</span>
-                <MonthPicker value={forecastStart} onChange={(value) => updateSettings({ forecast_start_month: value || currentMonth() })} />
+                <MonthPicker value={forecastStart} min={calcStart} onChange={(value) => updateSettings({ forecast_start_month: value || currentMonth() })} />
               </label>
             </div>
 
@@ -2348,28 +2365,28 @@ export default function FinanceApp({ userId }: { userId: string }) {
                 <thead>
                   <tr>
                     <th className="corner">Показатель</th>
-                    {forecast.map((m) => <th key={`y-${m.month}`} className="year">{m.month.slice(0, 4)}</th>)}
+                    {forecast.map((m) => <th key={`y-${m.month}`} className={forecastCellClass(m.month, "year")}>{m.month.slice(0, 4)}</th>)}
                   </tr>
                   <tr>
                     <th className="corner sub">Месяц</th>
-                    {forecast.map((m) => <th key={`m-${m.month}`} className="month">{monthLabel(m.month)}</th>)}
+                    {forecast.map((m) => <th key={`m-${m.month}`} className={forecastCellClass(m.month, "month")}>{monthLabel(m.month)}</th>)}
                   </tr>
                 </thead>
                 <tbody>
-                  <tr className="strong netRow"><th className="rowhead">Остаток месяца</th>{forecast.map((m) => <td className={m.net < 0 ? "neg" : ""} key={`net-${m.month}`}>{full(m.net)}</td>)}</tr>
-                  <tr className="strong cumulativeRow"><th className="rowhead">Накопительно</th>{forecast.map((m) => <td className={m.balance < 0 ? "neg" : ""} key={`bal-${m.month}`}>{full(m.balance)}</td>)}</tr>
-                  <tr className="section incomeSection"><th className="rowhead">Доходы</th>{forecast.map((m) => <td key={`inc-${m.month}`}>{full(m.incomeTotal)}</td>)}</tr>
-                  {incomeRowNames.map((name) => (
-                    <tr className="incomeRow" key={`incrow-${name}`}>
-                      <th className="rowhead light">{name}</th>
-                      {forecast.map((m) => <td key={`${name}-${m.month}`}>{full(m.incomeBy[name] || 0)}</td>)}
+                  <tr className="strong netRow"><th className="rowhead">Остаток месяца</th>{forecast.map((m) => <td className={forecastCellClass(m.month, m.net < 0 ? "neg" : "")} key={`net-${m.month}`}>{full(m.net)}</td>)}</tr>
+                  <tr className="strong cumulativeRow"><th className="rowhead">Накопительно</th>{forecast.map((m) => <td className={forecastCellClass(m.month, m.balance < 0 ? "neg" : "")} key={`bal-${m.month}`}>{full(m.balance)}</td>)}</tr>
+                  <tr className="section incomeSection"><th className="rowhead">Доходы</th>{forecast.map((m) => <td className={forecastCellClass(m.month)} key={`inc-${m.month}`}>{full(m.incomeTotal)}</td>)}</tr>
+                  {manualIncomeForecastRows.map((row) => (
+                    <tr className="incomeRow manualForecastRow" key={`manual-income-${row.id}`}>
+                      <th className="rowhead light" title={row.tooltip}>{row.label}</th>
+                      {forecast.map((m) => <td className={forecastCellClass(m.month)} key={`${row.id}-${m.month}`}>{m.month === row.month ? full(row.amount) : full(0)}</td>)}
                     </tr>
                   ))}
-                  <tr className="section expenseSection"><th className="rowhead">Расходы</th>{forecast.map((m) => <td key={`exp-${m.month}`}>{full(m.expenseTotal)}</td>)}</tr>
-                  {expenseRowNames.map((name) => (
-                    <tr className="expenseRow" key={`exprow-${name}`}>
-                      <th className="rowhead light">{name}</th>
-                      {forecast.map((m) => <td key={`${name}-${m.month}`}>{full(m.expenseBy[name] || 0)}</td>)}
+                  <tr className="section expenseSection"><th className="rowhead">Расходы</th>{forecast.map((m) => <td className={forecastCellClass(m.month)} key={`exp-${m.month}`}>{full(m.expenseTotal)}</td>)}</tr>
+                  {manualExpenseForecastRows.map((row) => (
+                    <tr className="expenseRow manualForecastRow" key={`manual-expense-${row.id}`}>
+                      <th className="rowhead light" title={row.tooltip}>{row.label}</th>
+                      {forecast.map((m) => <td className={forecastCellClass(m.month)} key={`${row.id}-${m.month}`}>{m.month === row.month ? full(row.amount) : full(0)}</td>)}
                     </tr>
                   ))}
                 </tbody>
@@ -2474,7 +2491,7 @@ export default function FinanceApp({ userId }: { userId: string }) {
                     </div>
                     <div className="settingsGrid settingsGridCards">
                       <label>Дневник операций — показывать с<MonthPicker value={diaryStart} onChange={(value) => updateSettings({ diary_start_month: value || currentMonth() })} /><span>Это нижняя граница переключения месяцев в дневнике.</span></label>
-                      <label>Календарный прогноз — показывать с<MonthPicker value={forecastStart} onChange={(value) => updateSettings({ forecast_start_month: value || currentMonth() })} /><span>Прогноз начинается с этого месяца и не зависит от дневника.</span></label>
+                      <label>Календарный прогноз — показывать с<MonthPicker value={forecastStart} min={calcStart} onChange={(value) => updateSettings({ forecast_start_month: value || currentMonth() })} /><span>Прогноз начинается с этого месяца и не зависит от дневника.</span></label>
                       <label>Стартовый остаток<input type="number" value={settings.start_balance} onChange={(e) => updateSettings({ start_balance: Number(e.target.value || 0) })} /></label>
                       <label>Резервный план дохода<input type="number" value={settings.plan_income} onChange={(e) => updateSettings({ plan_income: Number(e.target.value || 0) })} /><span>Используется только когда регулярные доходы не заведены.</span></label>
                       <label>Резервный план расходов<input type="number" value={settings.plan_other} onChange={(e) => updateSettings({ plan_other: Number(e.target.value || 0) })} /><span>Используется только когда регулярные расходы не заведены.</span></label>

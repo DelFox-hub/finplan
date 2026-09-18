@@ -69,6 +69,7 @@ create table if not exists public.recurring_payments (
   active boolean not null default true,
   total_months integer not null default 0,
   paid_months integer not null default 0,
+  early_payoff_date date null,
   valid_from_month text null,
   valid_to_month text null,
   sort_order integer not null default 0,

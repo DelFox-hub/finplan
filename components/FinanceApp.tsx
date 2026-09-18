@@ -7,6 +7,13 @@ import GermanySettings from "@/components/GermanySettings";
 import MonthPicker from "@/components/MonthPicker";
 import { waitForRelocationSaves } from "@/lib/relocationSaveCoordinator";
 import type { ExchangeRateSnapshot } from "@/lib/exchangeRate";
+import { calculateMonthPlan } from "@/lib/financeCalculations";
+import {
+  creditRegularPaymentApplies,
+  getCreditEarlyPayoffInfo,
+  getCreditRemainingMonths,
+  normalizeCreditPayoffDate
+} from "@/lib/creditSchedule";
 
 type Kind = "income" | "expense";
 type PaymentType = "regular" | "credit";
@@ -57,6 +64,7 @@ type RecurringPayment = {
   active: boolean;
   total_months: number;
   paid_months: number;
+  early_payoff_date: string | null;
   valid_from_month: string | null;
   valid_to_month: string | null;
   sort_order: number;
@@ -93,6 +101,7 @@ type VirtualPaymentOperation = Operation & {
   virtual: true;
   virtual_kind: "payment";
   payment: RecurringPayment;
+  computed_credit_payoff?: boolean;
 };
 
 type VirtualIncomeOperation = Operation & {
@@ -206,12 +215,6 @@ function validInMonth(item: { valid_from_month?: string | null; valid_to_month?:
   return true;
 }
 
-function creditRemainingMonths(p: RecurringPayment) {
-  const total = Math.max(Number(p.total_months || 0), 0);
-  const paid = Math.min(Math.max(Number(p.paid_months || 0), 0), total);
-  return Math.max(total - paid, 0);
-}
-
 function categoryName(categories: Category[], id: string | null, fallback = "Другое") {
   return categories.find((c) => c.id === id)?.name || fallback;
 }
@@ -227,8 +230,7 @@ function paymentDue(payment: RecurringPayment, month: string, calcStart: string)
   if (payment.payment_type === "credit") {
     // У кредитов нет отдельного поля «До»: конец всегда считается от месяца
     // начала и общей длительности. Скрытое старое valid_to_month не учитывается.
-    const remaining = creditRemainingMonths(payment);
-    return remaining > 0 && cur < start + remaining;
+    return creditRegularPaymentApplies(payment, month, calcStart);
   }
 
   return validInMonth(payment, month);
@@ -423,7 +425,7 @@ export default function FinanceApp({ userId }: { userId: string }) {
   const pendingOperationPatchesRef = useRef<Record<string, Partial<Operation>>>({});
   const [settingsTableFilters, setSettingsTableFilters] = useState<Record<SettingsTableKey, Record<string, string>>>({
     payments: { active: "all", title: "", category: "", amount: "", due_day: "", from: "", to: "" },
-    credits: { active: "all", title: "", category: "", amount: "", due_day: "", total_months: "", paid_months: "", from: "" },
+    credits: { active: "all", title: "", category: "", amount: "", due_day: "", total_months: "", paid_months: "", from: "", early_payoff_date: "" },
     incomes: { active: "all", title: "", category: "", amount: "", frequency: "", due_day: "", from: "", to: "" },
     expenseCategories: { name: "" },
     incomeCategories: { name: "" }
@@ -541,7 +543,8 @@ export default function FinanceApp({ userId }: { userId: string }) {
   }
 
   async function signOut() {
-    await flushPendingDatabaseSaves();
+    const saved = await flushPendingDatabaseSaves();
+    if (!saved) return;
     await supabase.auth.signOut();
     window.location.href = "/login";
   }
@@ -722,6 +725,7 @@ export default function FinanceApp({ userId }: { userId: string }) {
           due_day: clampDay(row.due_day),
           total_months: totalMonths,
           paid_months: Math.min(nonNegative(row.paid_months), totalMonths),
+          early_payoff_date: normalizeCreditPayoffDate(row.early_payoff_date),
           sort_order: Number(row.sort_order || 0)
         };
       }));
@@ -835,45 +839,77 @@ export default function FinanceApp({ userId }: { userId: string }) {
     Object.values(saveTimersRef.current).forEach((timer) => clearTimeout(timer));
     saveTimersRef.current = {};
 
-    const tasks: Promise<unknown>[] = [];
+    const tasks: Promise<{ error?: { message?: string } | null } | void>[] = [];
     const settingsSnapshot = pendingSettingsRef.current;
     pendingSettingsRef.current = null;
     if (settingsSnapshot) {
       const previous = saveChainsRef.current.settings || Promise.resolve();
-      tasks.push(previous.catch(() => undefined).then(() => supabase.from("user_settings").upsert({
-        user_id: userId,
-        calc_start_month: settingsSnapshot.calc_start_month,
-        diary_start_month: settingsSnapshot.diary_start_month,
-        forecast_start_month: settingsSnapshot.forecast_start_month,
-        start_balance: Number(settingsSnapshot.start_balance || 0),
-        plan_income: Math.max(Number(settingsSnapshot.plan_income || 0), 0),
-        plan_other: Math.max(Number(settingsSnapshot.plan_other || 0), 0),
-        years: Math.min(Math.max(Number(settingsSnapshot.years || 3), 1), 10),
-        currency: settingsSnapshot.currency || "KZT"
-      })));
+      tasks.push(previous.catch(() => undefined).then(async () => {
+        const result = await supabase.from("user_settings").upsert({
+          user_id: userId,
+          calc_start_month: settingsSnapshot.calc_start_month,
+          diary_start_month: settingsSnapshot.diary_start_month,
+          forecast_start_month: settingsSnapshot.forecast_start_month,
+          start_balance: Number(settingsSnapshot.start_balance || 0),
+          plan_income: Math.max(Number(settingsSnapshot.plan_income || 0), 0),
+          plan_other: Math.max(Number(settingsSnapshot.plan_other || 0), 0),
+          years: Math.min(Math.max(Number(settingsSnapshot.years || 3), 1), 10),
+          currency: settingsSnapshot.currency || "KZT"
+        });
+        if (result.error) pendingSettingsRef.current = pendingSettingsRef.current
+          ? { ...settingsSnapshot, ...pendingSettingsRef.current }
+          : settingsSnapshot;
+        return result;
+      }));
     }
 
     Object.entries(pendingPaymentPatchesRef.current).forEach(([id, patch]) => {
       const previous = saveChainsRef.current[`payment:${id}`] || Promise.resolve();
-      tasks.push(previous.catch(() => undefined).then(() => supabase.from("recurring_payments").update(patch).eq("user_id", userId).eq("id", id)));
+      tasks.push(previous.catch(() => undefined).then(async () => {
+        const result = await supabase.from("recurring_payments").update(patch).eq("user_id", userId).eq("id", id);
+        if (result.error) pendingPaymentPatchesRef.current[id] = { ...patch, ...pendingPaymentPatchesRef.current[id] };
+        return result;
+      }));
     });
     pendingPaymentPatchesRef.current = {};
 
     Object.entries(pendingIncomePatchesRef.current).forEach(([id, patch]) => {
       const previous = saveChainsRef.current[`income:${id}`] || Promise.resolve();
-      tasks.push(previous.catch(() => undefined).then(() => supabase.from("recurring_incomes").update(patch).eq("user_id", userId).eq("id", id)));
+      tasks.push(previous.catch(() => undefined).then(async () => {
+        const result = await supabase.from("recurring_incomes").update(patch).eq("user_id", userId).eq("id", id);
+        if (result.error) pendingIncomePatchesRef.current[id] = { ...patch, ...pendingIncomePatchesRef.current[id] };
+        return result;
+      }));
     });
     pendingIncomePatchesRef.current = {};
 
     Object.entries(pendingOperationPatchesRef.current).forEach(([id, patch]) => {
       const previous = saveChainsRef.current[`operation:${id}`] || Promise.resolve();
-      tasks.push(previous.catch(() => undefined).then(() => supabase.from("operations").update(patch).eq("user_id", userId).eq("id", id)));
+      tasks.push(previous.catch(() => undefined).then(async () => {
+        const result = await supabase.from("operations").update(patch).eq("user_id", userId).eq("id", id);
+        if (result.error) pendingOperationPatchesRef.current[id] = { ...patch, ...pendingOperationPatchesRef.current[id] };
+        return result;
+      }));
     });
     pendingOperationPatchesRef.current = {};
 
     const remainingChains = Object.values(saveChainsRef.current);
     tasks.push(...remainingChains.map((chain) => chain.catch(() => undefined)));
-    if (tasks.length) await Promise.allSettled(tasks);
+    const results = tasks.length ? await Promise.allSettled(tasks) : [];
+    const failedResult = results.find((result) => result.status === "rejected"
+      || (result.status === "fulfilled" && result.value && "error" in result.value && result.value.error));
+    if (failedResult || saveErrorKeysRef.current.size > 0) {
+      const message = failedResult?.status === "rejected"
+        ? (failedResult.reason instanceof Error ? failedResult.reason.message : "Не удалось завершить сохранение")
+        : failedResult?.status === "fulfilled" && failedResult.value && "error" in failedResult.value
+          ? failedResult.value.error?.message || "Не удалось завершить сохранение"
+          : "Не все изменения сохранены";
+      failSave(`Ошибка сохранения: ${message}`);
+      flash(message);
+      return false;
+    }
+    finishSave();
+    return true;
   }
 
   function updateSettings(patch: Partial<Settings>) {
@@ -930,8 +966,28 @@ export default function FinanceApp({ userId }: { userId: string }) {
       .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0) || String(a.op_date).localeCompare(String(b.op_date)));
   }
 
-  function duePayments(month: string) {
-    return payments.filter((p) => paymentDue(p, month, calcStart));
+  function plannedPaymentsForMonth(month: string) {
+    const regular = payments
+      .filter((payment) => paymentDue(payment, month, calcStart))
+      .map((payment) => ({
+        payment,
+        amount: Number(payment.amount || 0),
+        title: payment.title,
+        opDate: dateForDay(month, payment.due_day),
+        computedCreditPayoff: false
+      }));
+    const earlyPayoffs = payments.flatMap((payment) => {
+      const payoff = getCreditEarlyPayoffInfo(payment, calcStart);
+      if (!payment.active || !payoff || payoff.month !== month) return [];
+      return [{
+        payment,
+        amount: payoff.payoffAmount,
+        title: `Полное досрочное погашение · ${payment.title}`,
+        opDate: payoff.date,
+        computedCreditPayoff: true
+      }];
+    });
+    return [...regular, ...earlyPayoffs];
   }
 
   function dueIncomes(month: string) {
@@ -943,32 +999,60 @@ export default function FinanceApp({ userId }: { userId: string }) {
   }
 
   function plannedChecklistItems(month = viewMonth): VirtualOperation[] {
-    const paymentRows: VirtualPaymentOperation[] = duePayments(month).map((p) => ({
-      id: `virtual:payment:${p.id}:${month}`,
+    const paymentRows: VirtualPaymentOperation[] = plannedPaymentsForMonth(month).map((entry) => ({
+      id: `virtual:payment:${entry.payment.id}:${month}${entry.computedCreditPayoff ? ":payoff" : ""}`,
       user_id: userId,
-      op_date: dateForDay(month, p.due_day),
+      op_date: entry.opDate,
       kind: "expense" as Kind,
-      category_id: p.category_id,
-      title: p.title,
-      amount: Number(p.amount || 0),
-      completed: !isPaymentExcluded(p.id, month),
-      sort_order: Number(p.sort_order || 0),
-      source_recurring_payment_id: p.id,
+      category_id: entry.payment.category_id,
+      title: entry.title,
+      amount: entry.amount,
+      completed: !isPaymentExcluded(entry.payment.id, month),
+      sort_order: Number(entry.payment.sort_order || 0),
+      source_recurring_payment_id: entry.payment.id,
       source_recurring_income_id: null,
       source_month: month,
       virtual: true as const,
       virtual_kind: "payment" as const,
-      payment: p
+      payment: entry.payment,
+      computed_credit_payoff: entry.computedCreditPayoff
     }));
 
-    return paymentRows
+    const materializedIncomeSources = new Set(
+      operations
+        .filter((operation) => operation.source_recurring_income_id)
+        .filter((operation) => (operation.source_month || operation.op_date.slice(0, 7)) === month)
+        .map((operation) => operation.source_recurring_income_id as string)
+    );
+    const incomeRows: VirtualIncomeOperation[] = dueIncomes(month)
+      .filter((income) => !materializedIncomeSources.has(income.id))
+      .map((income) => ({
+        id: `virtual:income:${income.id}:${month}`,
+        user_id: userId,
+        op_date: dateForDay(month, income.due_day),
+        kind: "income" as Kind,
+        category_id: income.category_id,
+        title: income.title,
+        amount: Number(income.amount || 0),
+        completed: false,
+        sort_order: Number(income.sort_order || 0),
+        source_recurring_payment_id: null,
+        source_recurring_income_id: income.id,
+        source_month: month,
+        virtual: true as const,
+        virtual_kind: "income" as const,
+        income
+      }));
+
+    return [...paymentRows, ...incomeRows]
       .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0) || String(a.op_date).localeCompare(String(b.op_date)));
   }
 
   function checklistOps(month = viewMonth): AnyOperation[] {
-    // Дневник показывает ручные операции и регулярные расходы.
-    // Регулярные доходы участвуют в прогнозе, но не выводятся отдельными строками дневника.
-    const real = monthOps(month).filter((o) => !o.source_recurring_payment_id && !o.source_recurring_income_id);
+    // Old materialized payment copies are hidden because current payment settings
+    // provide their virtual rows. Materialized recurring incomes are real facts and
+    // must remain visible in the month of their actual date.
+    const real = monthOps(month).filter((operation) => !operation.source_recurring_payment_id);
     const virtual = plannedChecklistItems(month);
     const all: AnyOperation[] = [...real, ...virtual];
     return all.sort((a, b) => {
@@ -1176,71 +1260,35 @@ export default function FinanceApp({ userId }: { userId: string }) {
     setOperations((prev) => prev.filter((x) => x.id !== op.id));
   }
 
-  function oneMonthPlan(month: string) {
-    const incomeBy: Record<string, number> = {};
-    const expenseBy: Record<string, number> = {};
-    incomeCategories.forEach((c) => (incomeBy[c.name] = 0));
-    expenseCategories.forEach((c) => (expenseBy[c.name] = 0));
+  const oneMonthPlan = useCallback((month: string) => calculateMonthPlan({
+    month,
+    incomeCategories,
+    expenseCategories,
+    operations,
+    plannedIncomes: incomes.filter((income) => incomeDue(income, month, calcStart)),
+    plannedPayments: plannedPaymentsForMonth(month).map((entry) => ({
+      ...entry.payment,
+      amount: entry.amount
+    })),
+    exclusions,
+    // The fallback fields mean “no recurring settings configured”, not “this
+    // month's current total happens to be zero”. A manual operation must not
+    // silently remove the whole fallback plan.
+    hasConfiguredRecurringIncome: incomes.some((income) => income.active),
+    hasConfiguredRecurringExpense: payments.some((payment) => payment.active),
+    fallbackIncome: Number(settings?.plan_income || 0),
+    fallbackExpense: Number(settings?.plan_other || 0)
+  }), [incomeCategories, expenseCategories, operations, incomes, payments, exclusions, calcStart, settings?.plan_income, settings?.plan_other]);
 
-    const allOps = operations.filter((o) => inMonth(o.op_date, month));
-    const doneOps = allOps.filter((o) => o.completed);
-
-    const doneIncomeSource = new Set(
-      operations
-        .filter((operation) => operation.completed && operation.source_recurring_income_id)
-        .filter((operation) => (operation.source_month || operation.op_date.slice(0, 7)) === month)
-        .map((operation) => operation.source_recurring_income_id)
-    );
-
-    dueIncomes(month).forEach((i) => {
-      if (doneIncomeSource.has(i.id)) return;
-      const name = categoryName(incomeCategories, i.category_id, "Доход");
-      incomeBy[name] = (incomeBy[name] || 0) + Number(i.amount || 0);
-    });
-
-    // Платежи из настроек считаются по самой настройке. Старая операция-копия
-    // не влияет на итог, поэтому изменение суммы/статьи сразу отражается в прогнозе.
-    duePayments(month).forEach((p) => {
-      if (isPaymentExcluded(p.id, month)) return;
-      const name = categoryName(expenseCategories, p.category_id, "Другое");
-      expenseBy[name] = (expenseBy[name] || 0) + Number(p.amount || 0);
-    });
-
-    doneOps.filter((o) => o.kind === "income").forEach((o) => {
-      const name = categoryName(incomeCategories, o.category_id, "Доход");
-      incomeBy[name] = (incomeBy[name] || 0) + Number(o.amount || 0);
-    });
-
-    doneOps.filter((o) => o.kind === "expense" && !o.source_recurring_payment_id).forEach((o) => {
-      const name = categoryName(expenseCategories, o.category_id, "Другое");
-      expenseBy[name] = (expenseBy[name] || 0) + Number(o.amount || 0);
-    });
-
-    const incomeBeforeFallback = Object.values(incomeBy).reduce((a, b) => a + b, 0);
-    if (incomeBeforeFallback <= 0 && Number(settings?.plan_income || 0) > 0) {
-      incomeBy["Плановый доход"] = (incomeBy["Плановый доход"] || 0) + Number(settings?.plan_income || 0);
-    }
-
-    const expenseBeforeFallback = Object.values(expenseBy).reduce((a, b) => a + b, 0);
-    if (expenseBeforeFallback <= 0 && Number(settings?.plan_other || 0) > 0) {
-      expenseBy["План прочих расходов"] = (expenseBy["План прочих расходов"] || 0) + Number(settings?.plan_other || 0);
-    }
-
-    const incomeTotal = Object.values(incomeBy).reduce((a, b) => a + b, 0);
-    const expenseTotal = Object.values(expenseBy).reduce((a, b) => a + b, 0);
-
-    return { month, incomeBy, expenseBy, incomeTotal, expenseTotal, net: incomeTotal - expenseTotal };
-  }
-
-  function balanceBeforeMonth(month: string) {
+  const balanceBeforeMonth = useCallback((month: string) => {
     let balance = Number(settings?.start_balance || 0);
     for (let i = monthIndex(calcStart); i < monthIndex(month); i++) {
       balance += oneMonthPlan(monthFromIndex(i)).net;
     }
     return balance;
-  }
+  }, [settings?.start_balance, calcStart, oneMonthPlan]);
 
-  function forecastData() {
+  const forecast = useMemo(() => {
     const visibleStart = forecastStart;
     const visibleMonths = Number(settings?.years || 3) * 12;
     const first = monthIndex(calcStart);
@@ -1257,11 +1305,10 @@ export default function FinanceApp({ userId }: { userId: string }) {
     }
 
     return rows;
-  }
+  }, [forecastStart, settings?.years, settings?.start_balance, calcStart, oneMonthPlan]);
 
-  const forecast = forecastData();
-  const selectedPlan = oneMonthPlan(viewMonth);
-  const before = balanceBeforeMonth(viewMonth);
+  const selectedPlan = useMemo(() => oneMonthPlan(viewMonth), [oneMonthPlan, viewMonth]);
+  const before = useMemo(() => balanceBeforeMonth(viewMonth), [balanceBeforeMonth, viewMonth]);
   const selectedEndBalance = before + selectedPlan.net;
 
   const opRows = checklistOps(viewMonth);
@@ -1506,6 +1553,7 @@ export default function FinanceApp({ userId }: { userId: string }) {
       active: true,
       total_months: 0,
       paid_months: 0,
+      early_payoff_date: null,
       valid_from_month: viewMonth,
       valid_to_month: null,
       sort_order: nextSortOrder(payments)
@@ -1536,10 +1584,18 @@ export default function FinanceApp({ userId }: { userId: string }) {
     if (patch.paid_months !== undefined || nextPaid > nextTotal) normalized.paid_months = Math.min(nextPaid, nextTotal);
     if (patch.amount !== undefined) normalized.amount = nonNegative(patch.amount);
     if (patch.due_day !== undefined) normalized.due_day = clampDay(patch.due_day);
+    if (patch.early_payoff_date !== undefined) normalized.early_payoff_date = normalizeCreditPayoffDate(patch.early_payoff_date);
     const nextFrom = normalizeMonth(patch.valid_from_month !== undefined ? patch.valid_from_month : current.valid_from_month);
     const nextTo = normalizeMonth(patch.valid_to_month !== undefined ? patch.valid_to_month : current.valid_to_month);
     if (nextFrom && nextTo && monthIndex(nextTo) < monthIndex(nextFrom)) normalized.valid_to_month = null;
     if (current.payment_type === "credit") normalized.valid_to_month = null;
+
+    if (current.payment_type === "credit") {
+      const candidate = { ...current, ...normalized };
+      if (candidate.early_payoff_date && !getCreditEarlyPayoffInfo(candidate, calcStart)) normalized.early_payoff_date = null;
+    } else {
+      normalized.early_payoff_date = null;
+    }
 
     setPayments((previous) => previous.map((payment) => payment.id === id ? { ...payment, ...normalized } : payment));
     pendingPaymentPatchesRef.current[id] = { ...pendingPaymentPatchesRef.current[id], ...normalized };
@@ -1773,6 +1829,7 @@ export default function FinanceApp({ userId }: { userId: string }) {
           active: s.active !== false,
           total_months: Number(s.total_months ?? s.totalMonths ?? s.repeatMonths ?? s.creditMonths ?? 0),
           paid_months: Number(s.paid_months ?? s.paidMonths ?? s.paid ?? 0),
+          early_payoff_date: normalizeCreditPayoffDate(s.early_payoff_date ?? s.earlyPayoffDate),
           valid_from_month: cleanMonth(s.valid_from_month ?? s.validFrom ?? s.startMonth),
           valid_to_month: (s.payment_type || s.type) === "credit" ? null : cleanMonth(s.valid_to_month ?? s.validTo),
           sort_order: Number(s.sort_order ?? s.order ?? (i + 1) * 10)
@@ -1927,7 +1984,8 @@ export default function FinanceApp({ userId }: { userId: string }) {
         && matchesExactNumber(payment.due_day, filters.due_day)
         && matchesExactNumber(payment.total_months, filters.total_months)
         && matchesExactNumber(payment.paid_months, filters.paid_months)
-        && (!filters.from || normalizeMonth(payment.valid_from_month) === filters.from);
+        && (!filters.from || normalizeMonth(payment.valid_from_month) === filters.from)
+        && (!filters.early_payoff_date || normalizeCreditPayoffDate(payment.early_payoff_date) === filters.early_payoff_date);
     });
     const value = (payment: RecurringPayment) => {
       switch (sort.key) {
@@ -1939,11 +1997,14 @@ export default function FinanceApp({ userId }: { userId: string }) {
         case "total_months": return Number(payment.total_months || 0);
         case "paid_months": return Number(payment.paid_months || 0);
         case "from": return normalizeMonth(payment.valid_from_month) || "";
+        case "early_payoff_date": return normalizeCreditPayoffDate(payment.early_payoff_date) || "";
+        case "paid_amount": return getCreditEarlyPayoffInfo(payment, calcStart)?.paidAmount || Number(payment.paid_months || 0) * Number(payment.amount || 0);
+        case "payoff_amount": return getCreditEarlyPayoffInfo(payment, calcStart)?.payoffAmount || getCreditRemainingMonths(payment) * Number(payment.amount || 0);
         default: return Number(payment.sort_order || 0);
       }
     };
     return [...rows].sort((left, right) => compareSettingsValues(value(left), value(right)) * (sort.direction === "asc" ? 1 : -1));
-  }, [creditPayments, expenseCategories, settingsTableFilters.credits, settingsTableSorts.credits]);
+  }, [creditPayments, expenseCategories, settingsTableFilters.credits, settingsTableSorts.credits, calcStart]);
 
   const visibleIncomes = useMemo(() => {
     const filters = settingsTableFilters.incomes;
@@ -2150,6 +2211,7 @@ export default function FinanceApp({ userId }: { userId: string }) {
                         <input
                           type="checkbox"
                           checked={op.completed}
+                          disabled={"virtual" in op && op.virtual_kind === "payment" && !!op.computed_credit_payoff}
                           onChange={(e) => {
                             if ("virtual" in op) {
                               if (op.virtual_kind === "payment") toggleVirtualPayment(op, e.target.checked);
@@ -2175,7 +2237,9 @@ export default function FinanceApp({ userId }: { userId: string }) {
                           value={op.op_date}
                           aria-label={virtualPayment ? "Дата регулярного платежа" : "Дата регулярного дохода"}
                           onChange={(event) => virtualPayment
-                            ? updatePayment(virtualPayment.id, { due_day: Number(event.target.value.slice(8, 10) || 1) })
+                            ? "computed_credit_payoff" in op && op.computed_credit_payoff
+                              ? updatePayment(virtualPayment.id, { early_payoff_date: event.target.value })
+                              : updatePayment(virtualPayment.id, { due_day: Number(event.target.value.slice(8, 10) || 1) })
                             : updateIncome(virtualIncome!.id, { due_day: Number(event.target.value.slice(8, 10) || 1) })}
                         />
                       )}
@@ -2215,6 +2279,7 @@ export default function FinanceApp({ userId }: { userId: string }) {
                         <input
                           className="operationInlineControl"
                           value={op.title}
+                          readOnly={"virtual" in op && op.virtual_kind === "payment" && !!op.computed_credit_payoff}
                           aria-label="Комментарий операции"
                           onChange={(event) => real
                             ? updateOperationInline(op.id, { title: event.target.value })
@@ -2232,6 +2297,7 @@ export default function FinanceApp({ userId }: { userId: string }) {
                         step="1"
                         className={`operationInlineControl operationAmountInput ${op.kind}`}
                         value={op.amount}
+                        readOnly={"virtual" in op && op.virtual_kind === "payment" && !!op.computed_credit_payoff}
                         aria-label="Сумма операции"
                         onChange={(event) => real
                           ? updateOperationInline(op.id, { amount: Math.max(Number(event.target.value || 0), 0) })
@@ -2248,7 +2314,7 @@ export default function FinanceApp({ userId }: { userId: string }) {
                             <button className="delete" type="button" onClick={() => deleteOperation(op as Operation)}>×</button>
                           </>
                         ) : (
-                          <span className="virtualLock">рег.</span>
+                          <span className="virtualLock">{"computed_credit_payoff" in op && op.computed_credit_payoff ? "погаш." : "рег."}</span>
                         )}
                       </div>
                     </div>
@@ -2485,7 +2551,7 @@ export default function FinanceApp({ userId }: { userId: string }) {
                     <div className="settingsSectionHead">
                       <div>
                         <h4>Кредиты / рассрочки</h4>
-                        <p>Отдельная вкладка только для кредитных обязательств, чтобы не засорять обычные расходы.</p>
+                        <p>Дата полного досрочного погашения заменяет обычный платёж этого месяца одной суммой остатка и обрывает дальнейший график.</p>
                       </div>
                       <div className="settingsHeadActions">
                         <button className="btn blue" type="button" onClick={() => addPayment("credit")}>+ Кредит</button>
@@ -2510,7 +2576,10 @@ export default function FinanceApp({ userId }: { userId: string }) {
                               <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("credits", "due_day")}>День <span>{settingsSortMark("credits", "due_day")}</span></button></th>
                               <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("credits", "total_months")}>Всего мес. <span>{settingsSortMark("credits", "total_months")}</span></button></th>
                               <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("credits", "paid_months")}>Оплачено <span>{settingsSortMark("credits", "paid_months")}</span></button></th>
-                              <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("credits", "from")}>С <span>{settingsSortMark("credits", "from")}</span></button></th>
+                              <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("credits", "from")}>Начало кредита <span>{settingsSortMark("credits", "from")}</span></button></th>
+                              <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("credits", "early_payoff_date")}>Полное погашение <span>{settingsSortMark("credits", "early_payoff_date")}</span></button></th>
+                              <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("credits", "paid_amount")}>Погашено, ₸ <span>{settingsSortMark("credits", "paid_amount")}</span></button></th>
+                              <th><button type="button" className="settingsSortButton" onClick={() => toggleSettingsTableSort("credits", "payoff_amount")}>К погашению, ₸ <span>{settingsSortMark("credits", "payoff_amount")}</span></button></th>
                               <th></th>
                             </tr>
                             <tr className="settingsFilterRow">
@@ -2522,12 +2591,22 @@ export default function FinanceApp({ userId }: { userId: string }) {
                               <th><input aria-label="Фильтр кредитов по общей длительности" type="number" min="0" placeholder="=" value={settingsTableFilters.credits.total_months} onChange={(e) => setSettingsTableFilter("credits", "total_months", e.target.value)} /></th>
                               <th><input aria-label="Фильтр кредитов по оплаченным месяцам" type="number" min="0" placeholder="=" value={settingsTableFilters.credits.paid_months} onChange={(e) => setSettingsTableFilter("credits", "paid_months", e.target.value)} /></th>
                               <th><MonthPicker value={settingsTableFilters.credits.from || null} onChange={(value) => setSettingsTableFilter("credits", "from", value || "")} nullable className="filterMonthPicker" /></th>
+                              <th><input aria-label="Фильтр по дате полного погашения" type="date" value={settingsTableFilters.credits.early_payoff_date} onChange={(e) => setSettingsTableFilter("credits", "early_payoff_date", e.target.value)} /></th>
+                              <th></th>
+                              <th></th>
                               <th><button type="button" className="settingsFilterReset" aria-label="Очистить фильтры кредитов" title="Очистить фильтры" onClick={() => resetSettingsTableFilters("credits")}>×</button></th>
                             </tr>
                           </thead>
                           <tbody>
-                            {visibleCreditPayments.map((p) => (
-                              <tr key={p.id} className={p.active ? "" : "inactive"}>
+                            {visibleCreditPayments.map((p) => {
+                              const payoff = getCreditEarlyPayoffInfo(p, calcStart);
+                              const startMonth = normalizeMonth(p.valid_from_month) || calcStart;
+                              const paidInstallments = Math.min(Math.max(Number(p.paid_months || 0), 0), Number(p.total_months || 0));
+                              const firstUnpaidMonth = addMonths(startMonth, paidInstallments);
+                              const originalEndMonth = addMonths(startMonth, Math.max(Number(p.total_months || 0) - 1, 0));
+                              const paidAmount = payoff?.paidAmount ?? Math.min(Number(p.paid_months || 0), Number(p.total_months || 0)) * Number(p.amount || 0);
+                              const payoffAmount = payoff?.payoffAmount ?? getCreditRemainingMonths(p) * Number(p.amount || 0);
+                              return <tr key={p.id} className={p.active ? "" : "inactive"}>
                                 <td><input type="checkbox" checked={p.active} onChange={(e) => updatePayment(p.id, { active: e.target.checked })} /></td>
                                 <td><input value={p.title} onChange={(e) => updatePayment(p.id, { title: e.target.value })} /></td>
                                 <td><select value={p.category_id || ""} onChange={(e) => updatePayment(p.id, { category_id: e.target.value || null })}>{expenseCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></td>
@@ -2536,10 +2615,13 @@ export default function FinanceApp({ userId }: { userId: string }) {
                                 <td><input type="number" min="0" value={p.total_months} onChange={(e) => updatePayment(p.id, { total_months: Number(e.target.value || 0) })} /></td>
                                 <td><input type="number" min="0" max={Math.max(Number(p.total_months || 0), 0)} value={p.paid_months} onChange={(e) => updatePayment(p.id, { paid_months: Number(e.target.value || 0) })} /></td>
                                 <td><MonthPicker value={p.valid_from_month} onChange={(value) => updatePayment(p.id, { valid_from_month: value })} nullable /></td>
+                                <td><input type="date" min={`${firstUnpaidMonth}-01`} max={dateForDay(originalEndMonth, 31)} value={p.early_payoff_date || ""} onChange={(e) => updatePayment(p.id, { early_payoff_date: e.target.value || null })} /></td>
+                                <td className="creditCalculatedValue">{full(paidAmount)}</td>
+                                <td className="creditCalculatedValue payoff">{full(payoffAmount)}</td>
                                 <td><button type="button" className="iconDelete mini" aria-label={`Удалить ${p.title}`} onClick={() => deletePayment(p.id)}>×</button></td>
                               </tr>
-                            ))}
-                            {!visibleCreditPayments.length && <tr><td colSpan={9}><div className="settingsEmpty slim">{creditPayments.length ? "По фильтрам ничего не найдено." : "Кредитов пока нет."}</div></td></tr>}
+                            })}
+                            {!visibleCreditPayments.length && <tr><td colSpan={12}><div className="settingsEmpty slim">{creditPayments.length ? "По фильтрам ничего не найдено." : "Кредитов пока нет."}</div></td></tr>}
                           </tbody>
                         </table>
                       </div>

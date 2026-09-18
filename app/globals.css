@@ -1357,14 +1357,29 @@ select {
 .incomeTable th:nth-child(9), .incomeTable td:nth-child(9) { width: 4%; }
 
 .creditTable th:nth-child(1), .creditTable td:nth-child(1) { width: 5%; }
-.creditTable th:nth-child(2), .creditTable td:nth-child(2) { width: 16%; }
-.creditTable th:nth-child(3), .creditTable td:nth-child(3) { width: 14%; }
-.creditTable th:nth-child(4), .creditTable td:nth-child(4) { width: 9%; }
-.creditTable th:nth-child(5), .creditTable td:nth-child(5) { width: 6%; }
-.creditTable th:nth-child(6), .creditTable td:nth-child(6) { width: 8%; }
-.creditTable th:nth-child(7), .creditTable td:nth-child(7) { width: 8%; }
-.creditTable th:nth-child(8), .creditTable td:nth-child(8) { width: 30%; }
-.creditTable th:nth-child(9), .creditTable td:nth-child(9) { width: 4%; }
+.creditTable th:nth-child(2), .creditTable td:nth-child(2) { width: 13%; }
+.creditTable th:nth-child(3), .creditTable td:nth-child(3) { width: 11%; }
+.creditTable th:nth-child(4), .creditTable td:nth-child(4) { width: 8%; }
+.creditTable th:nth-child(5), .creditTable td:nth-child(5) { width: 5%; }
+.creditTable th:nth-child(6), .creditTable td:nth-child(6) { width: 7%; }
+.creditTable th:nth-child(7), .creditTable td:nth-child(7) { width: 7%; }
+.creditTable th:nth-child(8), .creditTable td:nth-child(8) { width: 14%; }
+.creditTable th:nth-child(9), .creditTable td:nth-child(9) { width: 11%; }
+.creditTable th:nth-child(10), .creditTable td:nth-child(10) { width: 8%; }
+.creditTable th:nth-child(11), .creditTable td:nth-child(11) { width: 8%; }
+.creditTable th:nth-child(12), .creditTable td:nth-child(12) { width: 3%; }
+
+.creditCalculatedValue {
+  color: #475569;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.creditCalculatedValue.payoff {
+  color: var(--red);
+}
 
 .settingsEmpty.slim {
   padding: 16px;
@@ -1581,9 +1596,12 @@ select {
   }
 
   .paymentsTable,
-  .creditTable,
   .incomeTable {
     min-width: 1120px;
+  }
+
+  .creditTable {
+    min-width: 1500px;
   }
 
   .settingsLayout {
@@ -2840,11 +2858,11 @@ select {
   }
 }
 
-/* FINAL Germany layout: always two panels side by side; do not inherit Kazakhstan stacking breakpoint */
+/* Germany uses two columns only while each panel still has enough room for its editors. */
 .germanyDashboard {
-  display: grid !important;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
-  gap: 10px !important;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
   min-height: 680px;
   width: 100%;
   min-width: 0;
@@ -2856,6 +2874,19 @@ select {
   width: 100%;
   height: 100%;
   align-self: stretch;
+}
+
+@media (max-width: 1120px) {
+  .germanyDashboard {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  .germanyDashboard > .germanyExpensePanel,
+  .germanyDashboard > .germanyForecastPanel {
+    min-height: 560px;
+    height: auto;
+  }
 }
 
 /* Germany expense row integrity: keep every editor on one physical row */
@@ -2995,6 +3026,28 @@ select {
   .salaryCompactTitle {
     grid-column: 1 / -1;
   }
+}
+
+@media (max-width: 760px) {
+  .germanyKzRow {
+    grid-template-columns: 32px minmax(82px, .7fr) minmax(110px, 1fr) 32px;
+    grid-template-areas:
+      "check type group actions"
+      "check comment comment actions"
+      "check params params actions"
+      "check amount amount actions";
+    min-height: 142px;
+    padding: 5px 8px;
+    overflow: visible;
+  }
+
+  .germanyKzRow > .checkcell { grid-area: check; }
+  .germanyKzRow > .germanyCellType { grid-area: type; }
+  .germanyKzRow > .germanyCellGroup { grid-area: group; }
+  .germanyKzRow > .germanyCellComment { grid-area: comment; }
+  .germanyKzRow > .germanyCellParams { grid-area: params; }
+  .germanyKzRow > .germanyCellAmount { grid-area: amount; }
+  .germanyKzRow > .rowactions { grid-area: actions; }
 }
 
 /* Kazakhstan diary: compact rows so more entries fit on one page */

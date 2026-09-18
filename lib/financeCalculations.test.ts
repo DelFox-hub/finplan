@@ -89,6 +89,30 @@ describe("calculateMonthPlan", () => {
     expect(result.net).toBe(-35_000);
   });
 
+  it("keeps recurring settings in totals when manual rows are added", () => {
+    const result = calculateMonthPlan({
+      ...baseInput(),
+      plannedIncomes: [{ id: "income-1", category_id: "salary", amount: 100_000 }],
+      plannedPayments: [{ id: "payment-1", category_id: "home", amount: 40_000 }],
+      hasConfiguredRecurringIncome: true,
+      hasConfiguredRecurringExpense: true,
+      operations: [{
+        op_date: "2026-09-18",
+        kind: "expense",
+        category_id: "home",
+        amount: 15_000,
+        completed: false,
+        source_recurring_payment_id: null,
+        source_recurring_income_id: null,
+        source_month: null
+      }]
+    });
+
+    expect(result.incomeTotal).toBe(100_000);
+    expect(result.expenseTotal).toBe(55_000);
+    expect(result.net).toBe(45_000);
+  });
+
   it("does not remove a fallback merely because a manual operation exists", () => {
     const result = calculateMonthPlan({
       ...baseInput(),

@@ -101,12 +101,10 @@ export function calculateMonthPlan(input: {
   }
 
   for (const operation of operationsInMonth) {
-    // Manual rows are part of the monthly plan immediately, even before the
-    // checkbox is marked as fact. Materialized recurring rows keep their old
-    // semantics: only a completed recurring income replaces its planned copy,
-    // and old recurring-payment copies are never counted twice.
     const isManual = !operation.source_recurring_payment_id && !operation.source_recurring_income_id;
 
+    // A manually entered row is already a plan for its month, even before it is
+    // marked as fact. Recurring rows keep the separate settings-driven logic.
     if (operation.kind === "income") {
       if (!isManual && !operation.completed) continue;
       const name = categoryName(incomeCategories, operation.category_id, "Доход");
@@ -114,6 +112,8 @@ export function calculateMonthPlan(input: {
       continue;
     }
 
+    // Regular payments are represented by plannedPayments from settings. Old
+    // materialized copies must never be counted for a second time.
     if (isManual) {
       const name = categoryName(expenseCategories, operation.category_id, "Другое");
       expenseBy[name] = Number(expenseBy[name] || 0) + Number(operation.amount || 0);

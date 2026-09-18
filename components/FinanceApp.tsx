@@ -1050,18 +1050,17 @@ export default function FinanceApp({ userId }: { userId: string }) {
   }
 
   function checklistOps(month = viewMonth): AnyOperation[] {
-    // Old materialized payment copies are hidden because current payment settings
-    // provide their virtual rows. Materialized recurring incomes are real facts and
-    // must remain visible in the month of their actual date.
-    const real = monthOps(month).filter((operation) => !operation.source_recurring_payment_id);
-    const virtual = plannedChecklistItems(month);
-    const all: AnyOperation[] = [...real, ...virtual];
-    return all.sort((a, b) => {
-      const doneA = a.completed ? 1 : 0;
-      const doneB = b.completed ? 1 : 0;
-      if (doneA !== doneB) return doneA - doneB;
-      return Number(a.sort_order || 0) - Number(b.sort_order || 0) || String(a.op_date).localeCompare(String(b.op_date));
-    });
+    // The diary is for manually entered rows only. Recurring incomes, regular
+    // payments and credits stay in settings and still participate in every
+    // calculation through oneMonthPlan; they are simply not duplicated here.
+    return monthOps(month)
+      .filter((operation) => !operation.source_recurring_payment_id && !operation.source_recurring_income_id)
+      .sort((a, b) => {
+        const doneA = a.completed ? 1 : 0;
+        const doneB = b.completed ? 1 : 0;
+        if (doneA !== doneB) return doneA - doneB;
+        return Number(a.sort_order || 0) - Number(b.sort_order || 0) || String(a.op_date).localeCompare(String(b.op_date));
+      });
   }
 
   async function toggleVirtualPayment(item: VirtualPaymentOperation, checked: boolean) {
@@ -2072,9 +2071,6 @@ export default function FinanceApp({ userId }: { userId: string }) {
         const fallback = operation.kind === "income" ? "Доход" : "Другое";
         const category = categories.find((item) => item.id === operation.category_id);
         const label = category?.name || fallback;
-        // One forecast row = one manually used article. Several manual diary
-        // operations in the same article/month are summed instead of creating
-        // duplicate rows for every operation.
         const rowId = `${operation.kind}:${operation.category_id || `fallback:${label}`}`;
         const existing = rows.get(rowId);
         const amount = Number(operation.amount || 0);
@@ -2376,7 +2372,7 @@ export default function FinanceApp({ userId }: { userId: string }) {
               </div>
               <label className="forecastStartControl">
                 <span>Показывать с</span>
-                <MonthPicker value={forecastStart} min={calcStart} onChange={(value) => updateSettings({ forecast_start_month: value || currentMonth() })} />
+                <MonthPicker value={forecastStart} onChange={(value) => updateSettings({ forecast_start_month: value || currentMonth() })} />
               </label>
             </div>
 
@@ -2511,7 +2507,7 @@ export default function FinanceApp({ userId }: { userId: string }) {
                     </div>
                     <div className="settingsGrid settingsGridCards">
                       <label>Дневник операций — показывать с<MonthPicker value={diaryStart} onChange={(value) => updateSettings({ diary_start_month: value || currentMonth() })} /><span>Это нижняя граница переключения месяцев в дневнике.</span></label>
-                      <label>Календарный прогноз — показывать с<MonthPicker value={forecastStart} min={calcStart} onChange={(value) => updateSettings({ forecast_start_month: value || currentMonth() })} /><span>Прогноз начинается с этого месяца и не зависит от дневника.</span></label>
+                      <label>Календарный прогноз — показывать с<MonthPicker value={forecastStart} onChange={(value) => updateSettings({ forecast_start_month: value || currentMonth() })} /><span>Прогноз начинается с этого месяца и не зависит от дневника.</span></label>
                       <label>Стартовый остаток<input type="number" value={settings.start_balance} onChange={(e) => updateSettings({ start_balance: Number(e.target.value || 0) })} /></label>
                       <label>Резервный план дохода<input type="number" value={settings.plan_income} onChange={(e) => updateSettings({ plan_income: Number(e.target.value || 0) })} /><span>Используется только когда регулярные доходы не заведены.</span></label>
                       <label>Резервный план расходов<input type="number" value={settings.plan_other} onChange={(e) => updateSettings({ plan_other: Number(e.target.value || 0) })} /><span>Используется только когда регулярные расходы не заведены.</span></label>

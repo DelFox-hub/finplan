@@ -281,27 +281,35 @@ select {
 }
 
 .monthPicker {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 76px 24px;
+  position: relative;
+  display: flex;
   gap: 4px;
   align-items: center;
   width: 100%;
+  min-width: 138px;
 }
 
-.monthPicker select {
+.monthPickerTrigger {
   width: 100%;
   min-width: 0;
   height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fff;
-  padding: 0 7px;
+  padding: 0 9px;
   color: var(--text);
+  font: inherit;
   font-size: 12px;
+  white-space: nowrap;
 }
+.monthPickerTrigger.placeholder { color: var(--muted); }
+.monthPickerTrigger b { font-size: 15px; font-weight: 500; }
 
-.monthPickerClear,
-.monthPickerStub {
+.monthPickerClear {
   width: 24px;
   height: 24px;
   display: grid;
@@ -316,9 +324,18 @@ select {
   font-weight: 700;
 }
 
-.monthPickerStub {
-  border: 0;
-}
+.monthPickerPopover { position: absolute; z-index: 120; top: calc(100% + 5px); left: 0; width: 230px; max-width: min(230px, 90vw); border: 1px solid var(--line); border-radius: 10px; background: #fff; box-shadow: 0 14px 35px rgba(15, 23, 42, .18); overflow: hidden; }
+.monthPickerYears { max-height: 330px; overflow-y: auto; }
+.monthPickerYear { border-bottom: 1px solid #e5e7eb; }
+.monthPickerYear:last-child { border-bottom: 0; }
+.monthPickerYearButton,
+.monthPickerEmpty { width: 100%; border: 0; background: #f3f4f6; padding: 7px 10px; color: var(--text); text-align: left; font: inherit; font-size: 12px; }
+.monthPickerEmpty { background: #fff; color: var(--muted); border-bottom: 1px solid var(--line); }
+.monthPickerGrid { display: grid; grid-template-columns: repeat(4, 1fr); padding: 6px 4px; gap: 2px; }
+.monthPickerGrid button { border: 0; border-radius: 4px; background: transparent; padding: 7px 3px; color: var(--text); font: inherit; font-size: 11px; }
+.monthPickerGrid button:hover:not(:disabled) { background: #eef2f7; }
+.monthPickerGrid button.selected { background: #374151; color: #fff; box-shadow: inset 0 0 0 1px #111827; }
+.monthPickerGrid button:disabled { color: #cbd5e1; cursor: not-allowed; }
 
 .summaryGrid {
   display: grid;

@@ -448,7 +448,9 @@ export default function FinanceApp({ userId }: { userId: string }) {
 
   const diaryStart = settings?.diary_start_month || settings?.calc_start_month || currentMonth();
   const forecastStart = settings?.forecast_start_month || settings?.calc_start_month || currentMonth();
-  const calcStart = monthFromIndex(Math.min(monthIndex(diaryStart), monthIndex(forecastStart)));
+  // Display ranges never move the calculation baseline. Otherwise changing a
+  // visible period rewrites cumulative balances and shifts undated schedules.
+  const calcStart = settings?.calc_start_month || currentMonth();
 
   const refreshExchangeRate = useCallback(async (force = false) => {
     const cached = readCachedExchangeRate();
@@ -696,7 +698,7 @@ export default function FinanceApp({ userId }: { userId: string }) {
       const legacyStart = normalizeMonth(settingsData?.calc_start_month) || currentMonth();
       const loadedDiaryStart = normalizeMonth(settingsData?.diary_start_month) || legacyStart;
       const loadedForecastStart = normalizeMonth(settingsData?.forecast_start_month) || legacyStart;
-      const loadedCalcStart = monthFromIndex(Math.min(monthIndex(loadedDiaryStart), monthIndex(loadedForecastStart)));
+      const loadedCalcStart = legacyStart;
 
       setSettings({
         ...settingsData,
@@ -917,12 +919,11 @@ export default function FinanceApp({ userId }: { userId: string }) {
     const patched = { ...(pendingSettingsRef.current || settings), ...patch };
     const nextDiaryStart = patched.diary_start_month || patched.calc_start_month || currentMonth();
     const nextForecastStart = patched.forecast_start_month || patched.calc_start_month || currentMonth();
-    const nextCalcStart = monthFromIndex(Math.min(monthIndex(nextDiaryStart), monthIndex(nextForecastStart)));
     const next: Settings = {
       ...patched,
       diary_start_month: nextDiaryStart,
       forecast_start_month: nextForecastStart,
-      calc_start_month: nextCalcStart,
+      calc_start_month: patched.calc_start_month || settings.calc_start_month || currentMonth(),
       start_balance: Number(patched.start_balance || 0),
       plan_income: Math.max(Number(patched.plan_income || 0), 0),
       plan_other: Math.max(Number(patched.plan_other || 0), 0),
@@ -1796,7 +1797,7 @@ export default function FinanceApp({ userId }: { userId: string }) {
       const legacyStart = cleanMonth(legacy.settings?.calc_start_month || legacy.calcStartMonth || legacy.calc_start_month || legacy.month) || currentMonth();
       const importedDiaryStart = cleanMonth(legacy.settings?.diary_start_month || legacy.diaryStartMonth) || legacyStart;
       const importedForecastStart = cleanMonth(legacy.settings?.forecast_start_month || legacy.forecastStartMonth) || legacyStart;
-      const importedCalcStart = monthFromIndex(Math.min(monthIndex(importedDiaryStart), monthIndex(importedForecastStart)));
+      const importedCalcStart = legacyStart;
       const { error: settingsErr } = await supabase.from("user_settings").upsert({
         user_id: userId,
         calc_start_month: importedCalcStart,

@@ -2055,26 +2055,46 @@ export default function FinanceApp({ userId }: { userId: string }) {
 
   const manualForecastRows = useMemo(() => {
     const visibleMonths = new Set(forecast.map((item) => item.month));
-    return operations
+    const rows = new Map<string, {
+      id: string;
+      kind: Kind;
+      label: string;
+      sortOrder: number;
+      amountsByMonth: Record<string, number>;
+    }>();
+
+    operations
       .filter((operation) => !operation.source_recurring_payment_id && !operation.source_recurring_income_id)
       .filter((operation) => visibleMonths.has(operation.op_date.slice(0, 7)))
-      .map((operation) => {
-        const fallback = operation.kind === "income"
-          ? categoryName(incomeCategories, operation.category_id, "Доход")
-          : categoryName(expenseCategories, operation.category_id, "Другое");
-        const cleanTitle = operation.title.trim();
-        return {
-          id: operation.id,
+      .forEach((operation) => {
+        const month = operation.op_date.slice(0, 7);
+        const categories = operation.kind === "income" ? incomeCategories : expenseCategories;
+        const fallback = operation.kind === "income" ? "Доход" : "Другое";
+        const category = categories.find((item) => item.id === operation.category_id);
+        const label = category?.name || fallback;
+        // One forecast row = one manually used article. Several manual diary
+        // operations in the same article/month are summed instead of creating
+        // duplicate rows for every operation.
+        const rowId = `${operation.kind}:${operation.category_id || `fallback:${label}`}`;
+        const existing = rows.get(rowId);
+        const amount = Number(operation.amount || 0);
+
+        if (existing) {
+          existing.amountsByMonth[month] = Number(existing.amountsByMonth[month] || 0) + amount;
+          existing.sortOrder = Math.min(existing.sortOrder, Number(category?.sort_order ?? operation.sort_order ?? 0));
+          return;
+        }
+
+        rows.set(rowId, {
+          id: rowId,
           kind: operation.kind,
-          month: operation.op_date.slice(0, 7),
-          opDate: operation.op_date,
-          sortOrder: Number(operation.sort_order || 0),
-          label: cleanTitle && cleanTitle !== "Операция" ? cleanTitle : fallback,
-          amount: Number(operation.amount || 0),
-          tooltip: `${operation.op_date} · ${fallback}`
-        };
-      })
-      .sort((left, right) => left.opDate.localeCompare(right.opDate) || left.sortOrder - right.sortOrder || left.label.localeCompare(right.label, "ru"));
+          label,
+          sortOrder: Number(category?.sort_order ?? operation.sort_order ?? 0),
+          amountsByMonth: { [month]: amount }
+        });
+      });
+
+    return [...rows.values()].sort((left, right) => left.sortOrder - right.sortOrder || left.label.localeCompare(right.label, "ru"));
   }, [forecast, operations, incomeCategories, expenseCategories]);
 
   const manualIncomeForecastRows = manualForecastRows.filter((row) => row.kind === "income");
@@ -2378,15 +2398,15 @@ export default function FinanceApp({ userId }: { userId: string }) {
                   <tr className="section incomeSection"><th className="rowhead">Доходы</th>{forecast.map((m) => <td className={forecastCellClass(m.month)} key={`inc-${m.month}`}>{full(m.incomeTotal)}</td>)}</tr>
                   {manualIncomeForecastRows.map((row) => (
                     <tr className="incomeRow manualForecastRow" key={`manual-income-${row.id}`}>
-                      <th className="rowhead light" title={row.tooltip}>{row.label}</th>
-                      {forecast.map((m) => <td className={forecastCellClass(m.month)} key={`${row.id}-${m.month}`}>{m.month === row.month ? full(row.amount) : full(0)}</td>)}
+                      <th className="rowhead light">{row.label}</th>
+                      {forecast.map((m) => <td className={forecastCellClass(m.month)} key={`${row.id}-${m.month}`}>{full(row.amountsByMonth[m.month] || 0)}</td>)}
                     </tr>
                   ))}
                   <tr className="section expenseSection"><th className="rowhead">Расходы</th>{forecast.map((m) => <td className={forecastCellClass(m.month)} key={`exp-${m.month}`}>{full(m.expenseTotal)}</td>)}</tr>
                   {manualExpenseForecastRows.map((row) => (
                     <tr className="expenseRow manualForecastRow" key={`manual-expense-${row.id}`}>
-                      <th className="rowhead light" title={row.tooltip}>{row.label}</th>
-                      {forecast.map((m) => <td className={forecastCellClass(m.month)} key={`${row.id}-${m.month}`}>{m.month === row.month ? full(row.amount) : full(0)}</td>)}
+                      <th className="rowhead light">{row.label}</th>
+                      {forecast.map((m) => <td className={forecastCellClass(m.month)} key={`${row.id}-${m.month}`}>{full(row.amountsByMonth[m.month] || 0)}</td>)}
                     </tr>
                   ))}
                 </tbody>
